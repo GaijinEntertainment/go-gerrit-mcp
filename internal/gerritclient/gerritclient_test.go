@@ -15,10 +15,13 @@ import (
 
 func testConfig(url string) *config.Config {
 	return &config.Config{
-		GerritURL: url,
-		Username:  "bot",
-		Token:     "s3cret",
-		Groups:    []config.Group{config.GroupRead},
+		GerritURL:    url,
+		Username:     "bot",
+		Token:        "s3cret",
+		Groups:       []config.Group{config.GroupRead},
+		IncludeTools: nil,
+		ExcludeTools: nil,
+		Projects:     nil,
 	}
 }
 

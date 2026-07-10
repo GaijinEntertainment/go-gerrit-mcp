@@ -36,6 +36,9 @@ var (
 type Client struct {
 	gerrit *gerrit.Client
 	self   gerrit.AccountInfo
+	// projects, when non-empty, confines every operation to the listed
+	// Gerrit projects (see docs/glossary.md: Project scoping).
+	projects []string
 }
 
 // New builds an authenticated client and validates the credentials against
@@ -58,7 +61,7 @@ func New(ctx context.Context, cfg *config.Config) (*Client, error) {
 		return nil, ErrCredentials.Wrap(errEmptyResponse)
 	}
 
-	return &Client{gerrit: g, self: *self}, nil
+	return &Client{gerrit: g, self: *self, projects: cfg.Projects}, nil
 }
 
 // Self reports the authenticated account as validated at startup.
