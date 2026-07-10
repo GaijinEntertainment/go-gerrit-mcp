@@ -84,11 +84,28 @@ func Test_Resolve(t *testing.T) {
 			want:        append(allReadTools(), tools.NamePostComments),
 		},
 		{
-			name:        "transition group exposes nothing yet",
+			name:        "transition group bundles its read subset",
 			giveGroups:  []config.Group{config.GroupTransition},
 			giveInclude: nil,
 			giveExclude: nil,
-			want:        nil,
+			want: []string{
+				tools.NameGetChange,
+				tools.NameSetVote,
+				tools.NameTransitionChange,
+			},
+		},
+		{
+			name:        "comment and transition union deduplicates",
+			giveGroups:  []config.Group{config.GroupComment, config.GroupTransition},
+			giveInclude: nil,
+			giveExclude: nil,
+			want: []string{
+				tools.NameGetChange,
+				tools.NameGetChangeComments,
+				tools.NamePostComments,
+				tools.NameSetVote,
+				tools.NameTransitionChange,
+			},
 		},
 		{
 			name:        "exclude removes tools",

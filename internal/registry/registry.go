@@ -36,7 +36,13 @@ func groupTools() map[config.Group][]string {
 			tools.NameGetChangeComments,
 			tools.NamePostComments,
 		},
-		config.GroupTransition: {}, // arrives with the transition group implementation
+		// transition bundles the minimal read subset it needs: understanding
+		// the change whose state it moves.
+		config.GroupTransition: {
+			tools.NameGetChange,
+			tools.NameSetVote,
+			tools.NameTransitionChange,
+		},
 	}
 }
 

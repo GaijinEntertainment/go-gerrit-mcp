@@ -18,6 +18,7 @@ const (
 	NameGetChangeComments = "get_change_comments"
 	NamePostComments      = "post_comments"
 	NameSetVote           = "set_vote"
+	NameTransitionChange  = "transition_change"
 )
 
 // Tool binds a tool name to its MCP registration.
@@ -37,6 +38,7 @@ func All(c *gerritclient.Client) []Tool {
 		getChangeComments(c),
 		postComments(c),
 		setVote(c),
+		transitionChange(c),
 	}
 }
 
