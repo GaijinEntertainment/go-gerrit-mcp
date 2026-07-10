@@ -1,13 +1,21 @@
 // Package registry maps enabled capability groups to the tool names they
 // expose. Groups are independent and self-sufficient; enabled groups union.
-// Tool filters (include/exclude) narrow the resolved set later — they never
+// Tool filters (include/exclude) narrow the resolved set — they never
 // escalate beyond it.
 package registry
 
 import (
+	"strings"
+
+	"dev.gaijin.team/go/golib/e"
+	"dev.gaijin.team/go/golib/fields"
+
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/config"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
+
+// ErrUnknownTools reports filter entries that name no known tool.
+var ErrUnknownTools = e.New("unknown tool names in filters")
 
 // groupTools returns the canonical group → tool-name mapping. Write-capable
 // groups will additionally bundle the minimal read subset they need to
@@ -26,9 +34,15 @@ func groupTools() map[config.Group][]string {
 	}
 }
 
-// Resolve returns the tool names exposed by the enabled groups: ordered by
-// group input order, deduplicated.
-func Resolve(groups []config.Group) []string {
+// Resolve returns the tool names the configuration exposes: enabled groups
+// union (ordered by group input order, deduplicated), narrowed by the
+// include and exclude filters. Filter entries naming no known tool fail
+// resolution so misconfigurations surface at startup.
+func Resolve(cfg *config.Config) ([]string, error) {
+	if err := validateFilters(cfg); err != nil {
+		return nil, err
+	}
+
 	var (
 		names []string
 		seen  = map[string]bool{}
@@ -36,9 +50,16 @@ func Resolve(groups []config.Group) []string {
 
 	byGroup := groupTools()
 
-	for _, g := range groups {
+	include := toSet(cfg.IncludeTools)
+	exclude := toSet(cfg.ExcludeTools)
+
+	for _, g := range cfg.Groups {
 		for _, name := range byGroup[g] {
-			if seen[name] {
+			if seen[name] || exclude[name] {
+				continue
+			}
+
+			if len(include) > 0 && !include[name] {
 				continue
 			}
 
@@ -48,5 +69,37 @@ func Resolve(groups []config.Group) []string {
 		}
 	}
 
-	return names
+	return names, nil
+}
+
+func validateFilters(cfg *config.Config) error {
+	known := map[string]bool{}
+	for _, names := range groupTools() {
+		for _, name := range names {
+			known[name] = true
+		}
+	}
+
+	var unknown []string
+
+	for _, name := range append(append([]string{}, cfg.IncludeTools...), cfg.ExcludeTools...) {
+		if !known[name] {
+			unknown = append(unknown, name)
+		}
+	}
+
+	if len(unknown) > 0 {
+		return ErrUnknownTools.WithFields(fields.F("tools", strings.Join(unknown, ",")))
+	}
+
+	return nil
+}
+
+func toSet(names []string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+
+	return set
 }

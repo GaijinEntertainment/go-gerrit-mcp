@@ -4,51 +4,107 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/config"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/registry"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
 
+func cfg(groups []config.Group, include, exclude []string) *config.Config {
+	return &config.Config{
+		GerritURL:    "https://gerrit.example.com",
+		Username:     "bot",
+		Token:        "s3cret",
+		Groups:       groups,
+		IncludeTools: include,
+		ExcludeTools: exclude,
+		Projects:     nil,
+	}
+}
+
+func allReadTools() []string {
+	return []string{
+		tools.NameSearchChanges,
+		tools.NameGetChange,
+		tools.NameListChangeFiles,
+		tools.NameGetFileDiff,
+		tools.NameGetChangeComments,
+	}
+}
+
 func Test_Resolve(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		give []config.Group
-		want []string
+		name        string
+		giveGroups  []config.Group
+		giveInclude []string
+		giveExclude []string
+		want        []string
 	}{
 		{
-			name: "read group exposes the change-read tools",
-			give: []config.Group{config.GroupRead},
+			name:        "read group exposes the change-read tools",
+			giveGroups:  []config.Group{config.GroupRead},
+			giveInclude: nil,
+			giveExclude: nil,
+			want:        allReadTools(),
+		},
+		{
+			name:        "no groups no tools",
+			giveGroups:  nil,
+			giveInclude: nil,
+			giveExclude: nil,
+			want:        nil,
+		},
+		{
+			name:        "duplicate groups collapse",
+			giveGroups:  []config.Group{config.GroupRead, config.GroupRead},
+			giveInclude: nil,
+			giveExclude: nil,
+			want:        allReadTools(),
+		},
+		{
+			name:        "write groups expose nothing yet",
+			giveGroups:  []config.Group{config.GroupComment, config.GroupTransition},
+			giveInclude: nil,
+			giveExclude: nil,
+			want:        nil,
+		},
+		{
+			name:        "exclude removes tools",
+			giveGroups:  []config.Group{config.GroupRead},
+			giveInclude: nil,
+			giveExclude: []string{tools.NameGetFileDiff, tools.NameSearchChanges},
 			want: []string{
-				tools.NameSearchChanges,
 				tools.NameGetChange,
 				tools.NameListChangeFiles,
-				tools.NameGetFileDiff,
 				tools.NameGetChangeComments,
 			},
 		},
 		{
-			name: "no groups no tools",
-			give: nil,
-			want: nil,
-		},
-		{
-			name: "duplicate groups collapse",
-			give: []config.Group{config.GroupRead, config.GroupRead},
+			name:        "include keeps only the listed subset",
+			giveGroups:  []config.Group{config.GroupRead},
+			giveInclude: []string{tools.NameGetChange, tools.NameGetChangeComments},
+			giveExclude: nil,
 			want: []string{
-				tools.NameSearchChanges,
 				tools.NameGetChange,
-				tools.NameListChangeFiles,
-				tools.NameGetFileDiff,
 				tools.NameGetChangeComments,
 			},
 		},
 		{
-			name: "write groups expose nothing yet",
-			give: []config.Group{config.GroupComment, config.GroupTransition},
-			want: nil,
+			name:        "exclude wins over include",
+			giveGroups:  []config.Group{config.GroupRead},
+			giveInclude: []string{tools.NameGetChange, tools.NameGetChangeComments},
+			giveExclude: []string{tools.NameGetChangeComments},
+			want:        []string{tools.NameGetChange},
+		},
+		{
+			name:        "include never escalates beyond enabled groups",
+			giveGroups:  []config.Group{config.GroupComment},
+			giveInclude: []string{tools.NameGetChange},
+			giveExclude: nil,
+			want:        nil,
 		},
 	}
 
@@ -56,7 +112,31 @@ func Test_Resolve(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, registry.Resolve(tt.give))
+			got, err := registry.Resolve(cfg(tt.giveGroups, tt.giveInclude, tt.giveExclude))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func Test_Resolve_UnknownFilterNames(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown include name fails", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := registry.Resolve(cfg([]config.Group{config.GroupRead}, []string{"bogus_tool"}, nil))
+		require.Error(t, err)
+		require.ErrorIs(t, err, registry.ErrUnknownTools)
+		assert.ErrorContains(t, err, "bogus_tool")
+	})
+
+	t.Run("unknown exclude name fails", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := registry.Resolve(cfg([]config.Group{config.GroupRead}, nil, []string{"nope"}))
+		require.Error(t, err)
+		require.ErrorIs(t, err, registry.ErrUnknownTools)
+		assert.ErrorContains(t, err, "nope")
+	})
 }
