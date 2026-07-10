@@ -65,6 +65,8 @@ linters:
         - net/url\.URL
         - crypto/tls\.Config
         - testing/fstest\.MapFile
+        - github\.com/andygrunwald/go-gerrit\..*
+        - github\.com/modelcontextprotocol/go-sdk/mcp\..*
     forbidigo:
       forbid:
         - pattern: (?i)(^|\.)print(f|ln)?$
@@ -240,6 +242,10 @@ linters:
     testifylint:
       disable:
         - require-error
+    wrapcheck:
+      ignore-package-globs:
+        # own packages return golib/e errors that already carry context
+        - dev.gaijin.team/go/go-gerrit-mcp/*
     wsl_v5:
       default: all
       branch-max-lines: 4
