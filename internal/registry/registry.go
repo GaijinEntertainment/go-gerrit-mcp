@@ -15,7 +15,11 @@ import (
 func groupTools() map[config.Group][]string {
 	return map[config.Group][]string{
 		config.GroupRead: {
+			tools.NameSearchChanges,
 			tools.NameGetChange,
+			tools.NameListChangeFiles,
+			tools.NameGetFileDiff,
+			tools.NameGetChangeComments,
 		},
 		config.GroupComment:    {}, // arrives with the comment group implementation
 		config.GroupTransition: {}, // arrives with the transition group implementation

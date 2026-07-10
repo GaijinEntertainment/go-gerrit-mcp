@@ -83,7 +83,7 @@ func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
 func Test_GetChange(t *testing.T) {
 	t.Parallel()
 
-	t.Run("lists exactly one tool", func(t *testing.T) {
+	t.Run("lists all read tools", func(t *testing.T) {
 		t.Parallel()
 
 		cs := session(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -93,8 +93,14 @@ func Test_GetChange(t *testing.T) {
 		res, err := cs.ListTools(t.Context(), nil)
 		require.NoError(t, err)
 
-		require.Len(t, res.Tools, 1)
-		assert.Equal(t, "get_change", res.Tools[0].Name)
+		names := make([]string, 0, len(res.Tools))
+		for _, tool := range res.Tools {
+			names = append(names, tool.Name)
+		}
+
+		assert.ElementsMatch(t, []string{
+			"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
+		}, names)
 	})
 
 	t.Run("renders change as llmxml", func(t *testing.T) {

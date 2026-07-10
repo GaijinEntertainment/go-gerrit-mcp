@@ -19,9 +19,15 @@ func Test_Resolve(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "read group exposes get_change",
+			name: "read group exposes the change-read tools",
 			give: []config.Group{config.GroupRead},
-			want: []string{tools.NameGetChange},
+			want: []string{
+				tools.NameSearchChanges,
+				tools.NameGetChange,
+				tools.NameListChangeFiles,
+				tools.NameGetFileDiff,
+				tools.NameGetChangeComments,
+			},
 		},
 		{
 			name: "no groups no tools",
@@ -31,7 +37,13 @@ func Test_Resolve(t *testing.T) {
 		{
 			name: "duplicate groups collapse",
 			give: []config.Group{config.GroupRead, config.GroupRead},
-			want: []string{tools.NameGetChange},
+			want: []string{
+				tools.NameSearchChanges,
+				tools.NameGetChange,
+				tools.NameListChangeFiles,
+				tools.NameGetFileDiff,
+				tools.NameGetChangeComments,
+			},
 		},
 		{
 			name: "write groups expose nothing yet",

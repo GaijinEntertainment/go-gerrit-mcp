@@ -11,7 +11,11 @@ import (
 
 // Tool names, referenced by the capability registry and tool filters.
 const (
-	NameGetChange = "get_change"
+	NameGetChange         = "get_change"
+	NameSearchChanges     = "search_changes"
+	NameListChangeFiles   = "list_change_files"
+	NameGetFileDiff       = "get_file_diff"
+	NameGetChangeComments = "get_change_comments"
 )
 
 // Tool binds a tool name to its MCP registration.
@@ -24,7 +28,11 @@ type Tool struct {
 // order. Callers filter by the capability registry before registering.
 func All(c *gerritclient.Client) []Tool {
 	return []Tool{
+		searchChanges(c),
 		getChange(c),
+		listChangeFiles(c),
+		getFileDiff(c),
+		getChangeComments(c),
 	}
 }
 
