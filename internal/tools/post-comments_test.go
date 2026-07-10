@@ -74,7 +74,7 @@ func Test_PostComments(t *testing.T) {
 			},
 		})
 
-		assert.Contains(t, out, `<review_posted change="123" message="true" comments="3" notify="OWNER"/>`)
+		assert.Equal(t, `<review_posted change="123" message="true" comments="3" notify="OWNER"/>`, out)
 
 		assert.Equal(t, "Overall: looks solid", (*body)["message"])
 		assert.Equal(t, "OWNER", (*body)["notify"])

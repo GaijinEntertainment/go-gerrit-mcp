@@ -128,7 +128,7 @@ func Test_TransitionChange(t *testing.T) {
 
 			out := callTool(t, cs, "transition_change", args)
 
-			assert.Contains(t, out, tt.wantAck)
+			assert.Equal(t, tt.wantAck, out)
 			assert.Equal(t, tt.wantPath, post.Path)
 			assert.Equal(t, tt.wantBody, post.Body)
 		})

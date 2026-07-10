@@ -72,7 +72,7 @@ func Test_SetReview_Gating(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, *posts, 1)
-		assert.Contains(t, (*posts)[0], "/revisions/current/review")
+		assert.Equal(t, "/a/changes/123/revisions/current/review", (*posts)[0])
 	})
 
 	t.Run("foreign change refused by default", func(t *testing.T) {

@@ -1,0 +1,6 @@
+<files change="123" revision="current" count="4">
+<file path="/COMMIT_MSG" status="A" insertions="9" deletions="0"/>
+<file path="assets/logo.png" status="A" insertions="0" deletions="0" binary="true"/>
+<file path="core/renamed.go" status="R" insertions="1" deletions="0" old_path="core/old.go"/>
+<file path="core/scanner.go" status="M" insertions="5" deletions="2"/>
+</files>

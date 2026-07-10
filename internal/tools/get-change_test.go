@@ -137,24 +137,7 @@ func Test_GetChange(t *testing.T) {
 		text, ok := res.Content[0].(*mcp.TextContent)
 		require.True(t, ok)
 
-		for _, part := range []string{
-			`<change number="123"`,
-			`project="core"`,
-			`status="NEW"`,
-			`owner="Alice (alice)"`,
-			`submittable="true"`,
-			`current_revision="abc123def"`,
-			"<subject>Fix nil deref in scanner</subject>",
-			`<label name="Code-Review">`,
-			`<vote value="2" by="Bob (bob)"/>`,
-			`<reviewer state="REVIEWER">Bob (bob)</reviewer>`,
-			`<message author="Bob (bob)"`,
-			"Looks good to me",
-		} {
-			assert.Contains(t, text.Text, part)
-		}
-
-		assert.NotContains(t, text.Text, "Carol", "zero votes must not render")
+		golden(t, "get-change", text.Text)
 
 		wantOpts := []string{"DETAILED_LABELS", "DETAILED_ACCOUNTS", "CURRENT_REVISION", "MESSAGES", "SUBMITTABLE"}
 		for _, opt := range wantOpts {

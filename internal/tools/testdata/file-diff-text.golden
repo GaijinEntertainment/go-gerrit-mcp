@@ -1,0 +1,8 @@
+<diff change="123" revision="2" file="core/scanner.go" change_type="MODIFIED">
+... 40 common lines skipped ...
+ func scan() {
+-	old := 1
++	new := 2
++	extra := 3
+ }
+</diff>

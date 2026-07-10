@@ -66,7 +66,7 @@ func Test_SetVote(t *testing.T) {
 			"message": "lgtm",
 		})
 
-		assert.Contains(t, out, `<vote_set change="123" label="Code-Review" value="2"/>`)
+		assert.Equal(t, `<vote_set change="123" label="Code-Review" value="2"/>`, out)
 
 		assert.Equal(t, "lgtm", (*body)["message"])
 		assert.Equal(t, map[string]any{"Code-Review": float64(2)}, (*body)["labels"])

@@ -146,7 +146,7 @@ func Test_ProjectScoping(t *testing.T) {
 
 		assert.NotNil(t, files)
 		require.Len(t, *requests, 1)
-		assert.Contains(t, (*requests)[0], "/files")
+		assert.Equal(t, "/a/changes/core~123/revisions/current/files/", (*requests)[0])
 	})
 
 	t.Run("unscoped client passes everything through", func(t *testing.T) {

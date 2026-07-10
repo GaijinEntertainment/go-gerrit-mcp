@@ -2,7 +2,6 @@ package tools_test
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,17 +63,7 @@ func Test_SearchChanges(t *testing.T) {
 
 	out := callTool(t, cs, "search_changes", map[string]any{"query": "status:open owner:self"})
 
-	for _, part := range []string{
-		`<changes query="status:open owner:self"`,
-		`count="2"`,
-		`more="true"`,
-		`<change number="1"`,
-		`owner="Alice (alice)"`,
-		`>First</change>`,
-		`status="MERGED"`,
-	} {
-		assert.Contains(t, out, part)
-	}
+	golden(t, "search-changes", out)
 
 	assert.Contains(t, *lastURL, "q=status")
 	assert.Contains(t, *lastURL, "n=25", "default limit applies")
@@ -95,21 +84,9 @@ func Test_ListChangeFiles(t *testing.T) {
 
 	out := callTool(t, cs, "list_change_files", map[string]any{"change": "123"})
 
-	for _, part := range []string{
-		`<files change="123" revision="current" count="4">`,
-		`<file path="/COMMIT_MSG" status="A"`,
-		`<file path="core/scanner.go" status="M" insertions="5" deletions="2"/>`,
-		`binary="true"`,
-		`old_path="core/old.go"`,
-	} {
-		assert.Contains(t, out, part)
-	}
+	golden(t, "list-change-files", out)
 
 	assert.Contains(t, *lastURL, "/a/changes/123/revisions/current/files")
-
-	logoIdx := strings.Index(out, "assets/logo.png")
-	scannerIdx := strings.Index(out, "core/scanner.go")
-	assert.Less(t, logoIdx, scannerIdx, "files sorted by path")
 }
 
 func Test_GetFileDiff(t *testing.T) {
@@ -135,16 +112,7 @@ func Test_GetFileDiff(t *testing.T) {
 			"change": "123", "file": "core/scanner.go", "revision": "2",
 		})
 
-		for _, part := range []string{
-			`<diff change="123" revision="2" file="core/scanner.go" change_type="MODIFIED">`,
-			"... 40 common lines skipped ...",
-			" func scan() {",
-			"-\told := 1",
-			"+\tnew := 2",
-			"+\textra := 3",
-		} {
-			assert.Contains(t, out, part)
-		}
+		golden(t, "file-diff-text", out)
 
 		assert.Contains(t, *lastURL, "/a/changes/123/revisions/2/files/core%2Fscanner.go/diff")
 	})
@@ -158,8 +126,7 @@ func Test_GetFileDiff(t *testing.T) {
 
 		out := callTool(t, cs, "get_file_diff", map[string]any{"change": "123", "file": "logo.png"})
 
-		assert.Contains(t, out, `binary="true"`)
-		assert.Contains(t, out, "/>")
+		golden(t, "file-diff-binary", out)
 	})
 }
 
@@ -194,24 +161,9 @@ func Test_GetChangeComments(t *testing.T) {
 
 		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
 
-		for _, part := range []string{
-			`<comments change="123" filter="all" threads="3">`,
-			`<thread resolved="true">`,
-			`<thread resolved="false">`,
-			`<comment id="c1"`,
-			`in_reply_to="c1"`,
-			`lines="20-25"`,
-			"Is this nil-safe?",
-			"Orphan reply",
-		} {
-			assert.Contains(t, out, part)
-		}
+		golden(t, "change-comments-all", out)
 
 		assert.Contains(t, *lastURL, "/a/changes/123/comments")
-
-		c1 := strings.Index(out, `<comment id="c1"`)
-		c2 := strings.Index(out, `<comment id="c2"`)
-		assert.Less(t, c1, c2, "replies follow their root chronologically")
 	})
 
 	t.Run("unresolved filter drops resolved threads", func(t *testing.T) {
@@ -221,10 +173,7 @@ func Test_GetChangeComments(t *testing.T) {
 
 		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "unresolved"})
 
-		assert.Contains(t, out, `threads="1"`)
-		assert.Contains(t, out, "This block races")
-		assert.NotContains(t, out, "Is this nil-safe?")
-		assert.NotContains(t, out, "Orphan reply")
+		golden(t, "change-comments-unresolved", out)
 	})
 
 	t.Run("invalid filter is an error", func(t *testing.T) {
