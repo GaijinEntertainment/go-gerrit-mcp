@@ -22,6 +22,9 @@ var (
 	errUnknownReplyTo = e.New("reply targets do not exist on the change")
 	errCommentNoText  = e.New("comment message must not be empty")
 	errCommentNoFile  = e.New("comment file must not be empty")
+	// errCommentFileUnknown guards against Gerrit's silent acceptance of
+	// comments on paths outside the change, which no reviewer ever sees.
+	errCommentFileUnknown = e.New("comment file is not part of the current revision")
 )
 
 type inlineComment struct {
@@ -48,10 +51,11 @@ func postComments(c *gerritclient.Client) Tool {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NamePostComments,
 				Description: "Post a review to a Gerrit change in one call: optional top-level message " +
-					"plus inline, range, file-level, and reply comments. Replies anchor to comment ids " +
-					"from get_change_comments; setting resolved on a reply toggles the thread state. " +
-					"Refused on changes not owned by the authenticated account unless the operator " +
-					"disabled the own-changes restriction.",
+					"plus inline, range, file-level, and reply comments. New comments must name a file " +
+					"of the current revision (or /COMMIT_MSG, /PATCHSET_LEVEL); replies anchor to " +
+					"comment ids from get_change_comments, and setting resolved on a reply toggles the " +
+					"thread state. Refused on changes not owned by the authenticated account unless " +
+					"the operator disabled the own-changes restriction.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in postCommentsInput,
 			) (*mcp.CallToolResult, any, error) {
 				input, err := buildReviewInput(ctx, c, in)
@@ -81,6 +85,10 @@ func buildReviewInput(ctx context.Context, c *gerritclient.Client, in postCommen
 
 	comments, err := buildComments(in.Comments)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validateCommentFiles(ctx, c, in); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +209,66 @@ func validateReplyTargets(ctx context.Context, c *gerritclient.Client, in postCo
 		return errUnknownReplyTo.WithFields(
 			fields.F("change", in.Change),
 			fields.F("ids", strings.Join(missing, ",")),
+			fields.F("hint", "comment ids may be stale; get_change_comments returns current anchors"),
 		)
+	}
+
+	return nil
+}
+
+// magicPath reports whether the path is one of Gerrit's virtual files,
+// commentable on every change.
+func magicPath(path string) bool {
+	switch path {
+	case "/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST":
+		return true
+	default:
+		return false
+	}
+}
+
+// validateCommentFiles refuses new comments on files absent from the current
+// revision — Gerrit silently accepts them and the comment is never seen next
+// to code. Replies are exempt: their thread may anchor to a file of an older
+// patch set. Costs one file-list fetch, only when new file comments exist.
+func validateCommentFiles(ctx context.Context, c *gerritclient.Client, in postCommentsInput) error {
+	var unchecked []string
+
+	for _, comment := range in.Comments {
+		if comment.ReplyTo == "" && !magicPath(comment.File) {
+			unchecked = append(unchecked, comment.File)
+		}
+	}
+
+	if len(unchecked) == 0 {
+		return nil
+	}
+
+	files, err := c.ListFiles(ctx, in.Change, "")
+	if err != nil {
+		return err
+	}
+
+	for _, file := range unchecked {
+		if _, ok := files[file]; ok {
+			continue
+		}
+
+		res := errCommentFileUnknown.WithFields(
+			fields.F("change", in.Change),
+			fields.F("file", file),
+		)
+
+		paths := make([]string, 0, len(files))
+		for path := range files {
+			paths = append(paths, path)
+		}
+
+		if near := proposals(file, paths); len(near) > 0 {
+			return res.WithField("did_you_mean", strings.Join(near, ", "))
+		}
+
+		return res.WithField("hint", "list_change_files names the files of the current revision")
 	}
 
 	return nil

@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"strings"
 
+	"dev.gaijin.team/go/golib/e"
+	"dev.gaijin.team/go/golib/fields"
 	gerrit "github.com/andygrunwald/go-gerrit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/llmxml"
 )
+
+var errFileNotInRevision = e.New("file is not part of the revision")
 
 type getFileDiffInput struct {
 	Change   string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
@@ -32,10 +36,50 @@ func getFileDiff(c *gerritclient.Client) Tool {
 					return nil, nil, err
 				}
 
+				// Gerrit answers 200 with an empty diff for paths absent from
+				// the revision; distinguish "no such file" from a legitimately
+				// empty diff before rendering a misleading success.
+				if !diff.Binary && len(diff.Content) == 0 {
+					if err := checkDiffFile(ctx, c, in); err != nil {
+						return nil, nil, err
+					}
+				}
+
 				return textResult(renderDiff(in, diff)), nil, nil
 			})
 		},
 	}
+}
+
+// checkDiffFile verifies the requested file exists in the revision, turning
+// Gerrit's ambiguous empty diff into an error that carries the closest
+// actual paths. Best-effort: an unverifiable file list keeps the empty diff.
+func checkDiffFile(ctx context.Context, c *gerritclient.Client, in getFileDiffInput) error {
+	files, err := c.ListFiles(ctx, in.Change, in.Revision)
+	if err != nil {
+		return nil //nolint:nilerr // verification is best-effort, the empty diff render stands
+	}
+
+	if _, ok := files[in.File]; ok {
+		return nil
+	}
+
+	res := errFileNotInRevision.WithFields(
+		fields.F("change", in.Change),
+		fields.F("revision", revisionLabel(in.Revision)),
+		fields.F("file", in.File),
+	)
+
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+
+	if near := proposals(in.File, paths); len(near) > 0 {
+		return res.WithField("did_you_mean", strings.Join(near, ", "))
+	}
+
+	return res.WithField("hint", "list_change_files names the files of the revision")
 }
 
 func renderDiff(in getFileDiffInput, diff *gerrit.DiffInfo) string {

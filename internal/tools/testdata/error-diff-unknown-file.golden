@@ -1,0 +1,3 @@
+<error tool="get_file_diff">
+file is not part of the revision (change=123, revision=current, file=core/scaner.go) (did_you_mean=core/scanner.go)
+</error>
