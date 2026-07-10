@@ -9,9 +9,11 @@ package config
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"strings"
+
+	"dev.gaijin.team/go/golib/e"
+	"dev.gaijin.team/go/golib/fields"
 )
 
 // Group is a capability group name: an independent, self-sufficient unit of
@@ -36,9 +38,10 @@ const (
 )
 
 var (
-	errEnvMissing    = errors.New("required environment variable is not set")
-	errUnknownGroups = errors.New("unknown capability groups")
-	errNoGroups      = errors.New("no capability groups enabled")
+	errEnvMissing    = e.New("required environment variable is not set")
+	errUnknownGroups = e.New("unknown capability groups")
+	errNoGroups      = e.New("no capability groups enabled")
+	errParseFlags    = e.New("parse flags")
 )
 
 // Config is the resolved server configuration.
@@ -113,7 +116,7 @@ func resolveFlags(args []string, getenv func(string) string, flags []*behaviorFl
 	}
 
 	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("parse flags: %w", err)
+		return errParseFlags.Wrap(err)
 	}
 
 	explicit := make(map[string]bool, len(flags))
@@ -143,7 +146,7 @@ func missingEnv(cfg *Config) []error {
 		{EnvToken, cfg.Token},
 	} {
 		if v.value == "" {
-			errs = append(errs, fmt.Errorf("%w: %s", errEnvMissing, v.name))
+			errs = append(errs, errEnvMissing.WithField("name", v.name))
 		}
 	}
 
@@ -179,8 +182,10 @@ func parseGroups(s string) ([]Group, error) {
 	}
 
 	if len(unknown) > 0 {
-		return nil, fmt.Errorf("%w: %s (known: read, comment, transition)",
-			errUnknownGroups, strings.Join(unknown, ", "))
+		return nil, errUnknownGroups.WithFields(
+			fields.F("groups", strings.Join(unknown, ",")),
+			fields.F("known", "read,comment,transition"),
+		)
 	}
 
 	if len(groups) == 0 {
