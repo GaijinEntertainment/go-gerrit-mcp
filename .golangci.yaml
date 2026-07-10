@@ -38,7 +38,7 @@ linters:
       line-length: 120
       tab-width: 2
     funlen:
-      lines: 0
+      lines: -1
       ignore-comments: true
       statements: 50
     gocognit:
