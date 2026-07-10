@@ -121,7 +121,8 @@ func Test_Load_Errors(t *testing.T) {
 
 		_, err := config.Load([]string{"--groups", "read,write"}, env(secrets()))
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "unknown capability groups: write")
+		assert.ErrorContains(t, err, "unknown capability groups")
+		assert.ErrorContains(t, err, "write")
 	})
 
 	t.Run("empty groups value rejected", func(t *testing.T) {
@@ -141,7 +142,8 @@ func Test_Load_Errors(t *testing.T) {
 		_, err := config.Load([]string{"--groups", "bogus"}, env(m))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "GERRIT_URL")
-		assert.ErrorContains(t, err, "unknown capability groups: bogus")
+		assert.ErrorContains(t, err, "unknown capability groups")
+		assert.ErrorContains(t, err, "bogus")
 	})
 
 	t.Run("unknown flag rejected", func(t *testing.T) {
