@@ -29,7 +29,13 @@ func groupTools() map[config.Group][]string {
 			tools.NameGetFileDiff,
 			tools.NameGetChangeComments,
 		},
-		config.GroupComment:    {}, // arrives with the comment group implementation
+		// comment bundles the minimal read subset it needs: understanding the
+		// change and the threads it replies to.
+		config.GroupComment: {
+			tools.NameGetChange,
+			tools.NameGetChangeComments,
+			tools.NamePostComments,
+		},
 		config.GroupTransition: {}, // arrives with the transition group implementation
 	}
 }
