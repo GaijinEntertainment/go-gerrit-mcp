@@ -20,8 +20,17 @@ import (
 
 const serverName = "go-gerrit-mcp"
 
-const instructions = "Gerrit code review over MCP. Tools are gated by capability groups " +
-	"(read, comment, transition) configured by the operator; only enabled tools are listed."
+const instructions = "Gerrit code review over MCP. A Gerrit change is one commit under review, addressed " +
+	"by change number (123), project~number (myproject~123), or the Change-Id footer of its commit message " +
+	"(I8473b95934b5732ac55d26311a706c9c2bde9940). A change evolves through numbered patch sets; the newest " +
+	"is called the current revision. Reviewers discuss code in inline comment threads and vote on labels " +
+	"such as Code-Review; a change whose submit requirements are satisfied can be submitted, which merges " +
+	"it. Typical flow: search_changes finds changes; get_change shows one change's status, votes, and " +
+	"message timeline; list_change_files and get_file_diff read the code; get_change_comments reads the " +
+	"inline discussion; post_comments, set_vote, and transition_change act on the review. Only the tools " +
+	"the operator enabled are listed, and writes may be restricted to changes owned by this account or to " +
+	"an allowlist of projects — refusals and errors name what to correct, and often carry did_you_mean " +
+	"proposals or hints worth following. All tool output is XML-like text addressed to you."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"

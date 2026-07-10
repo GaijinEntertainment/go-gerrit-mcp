@@ -28,20 +28,20 @@ var (
 )
 
 type inlineComment struct {
-	File      string `json:"file" jsonschema:"File path; /COMMIT_MSG or /PATCHSET_LEVEL for non-file comments"`
+	File      string `json:"file" jsonschema:"File path as list_change_files reports it; /COMMIT_MSG or /PATCHSET_LEVEL for non-file comments"`
 	Message   string `json:"message" jsonschema:"Comment text"`
-	Line      int    `json:"line,omitempty" jsonschema:"1-based line, omit for a file-level comment"`
-	StartLine int    `json:"start_line,omitempty" jsonschema:"Multi-line comment start, used with end_line"`
-	EndLine   int    `json:"end_line,omitempty" jsonschema:"Multi-line comment end, inclusive"`
+	Line      int    `json:"line,omitempty" jsonschema:"1-based line in the new version of the file; omit for a file-level comment"`
+	StartLine int    `json:"start_line,omitempty" jsonschema:"First line of a multi-line comment (new version of the file), used with end_line"`
+	EndLine   int    `json:"end_line,omitempty" jsonschema:"Last line of a multi-line comment, inclusive"`
 	ReplyTo   string `json:"reply_to,omitempty" jsonschema:"Comment id to reply to, from get_change_comments"`
-	Resolved  *bool  `json:"resolved,omitempty" jsonschema:"Thread resolution intent; replies inherit when omitted"`
+	Resolved  *bool  `json:"resolved,omitempty" jsonschema:"true resolves the thread, false reopens it; replies inherit the thread state when omitted"`
 }
 
 type postCommentsInput struct {
-	Change   string          `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
-	Message  string          `json:"message,omitempty" jsonschema:"Top-level review message"`
-	Comments []inlineComment `json:"comments,omitempty" jsonschema:"Inline and file comments to publish"`
-	Notify   string          `json:"notify,omitempty" jsonschema:"NONE, OWNER, OWNER_REVIEWERS, or ALL; default ALL"`
+	Change   string          `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
+	Message  string          `json:"message,omitempty" jsonschema:"Top-level review message, shown on the change rather than on a file"`
+	Comments []inlineComment `json:"comments,omitempty" jsonschema:"Inline, range, file-level, and reply comments to publish"`
+	Notify   string          `json:"notify,omitempty" jsonschema:"Who is notified by email: NONE, OWNER, OWNER_REVIEWERS, or ALL; default ALL"`
 }
 
 func postComments(c *gerritclient.Client) Tool {
@@ -50,12 +50,14 @@ func postComments(c *gerritclient.Client) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NamePostComments,
-				Description: "Post a review to a Gerrit change in one call: optional top-level message " +
-					"plus inline, range, file-level, and reply comments. New comments must name a file " +
-					"of the current revision (or /COMMIT_MSG, /PATCHSET_LEVEL); replies anchor to " +
-					"comment ids from get_change_comments, and setting resolved on a reply toggles the " +
-					"thread state. Refused on changes not owned by the authenticated account unless " +
-					"the operator disabled the own-changes restriction.",
+				Description: "Post a review to a Gerrit change in one call, published immediately and " +
+					"visible to everyone on the change: optional top-level message plus inline " +
+					"(file and line), range, file-level, and reply comments. New comments must " +
+					"name a file exactly as list_change_files reports it (or /COMMIT_MSG, " +
+					"/PATCHSET_LEVEL); replies anchor to comment ids from get_change_comments, and " +
+					"setting resolved on a reply toggles the thread state. Refused on changes not " +
+					"owned by the authenticated account unless the operator disabled the " +
+					"own-changes restriction.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in postCommentsInput,
 			) (*mcp.CallToolResult, any, error) {
 				input, err := buildReviewInput(ctx, c, in)

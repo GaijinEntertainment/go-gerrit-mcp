@@ -24,7 +24,7 @@ const (
 var errInvalidStatus = e.New("invalid status filter, expected all, resolved, or unresolved")
 
 type getChangeCommentsInput struct {
-	Change string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
+	Change string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
 	Status string `json:"status,omitempty" jsonschema:"Thread filter: all, resolved, or unresolved; default all"`
 }
 
@@ -34,9 +34,11 @@ func getChangeComments(c *gerritclient.Client) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameGetChangeComments,
-				Description: "List the published review comments of a Gerrit change, grouped by file " +
-					"and reconstructed into threads with their resolved state. Comment ids are the " +
-					"reply anchors for posting follow-ups.",
+				Description: "List a Gerrit change's inline review comments — the code discussion " +
+					"anchored to files and lines, distinct from the change messages get_change " +
+					"shows — grouped by file and reconstructed into threads with their resolved " +
+					"state. Comment ids are the reply anchors for post_comments; filter " +
+					"status=unresolved to see what still needs action.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in getChangeCommentsInput,
 			) (*mcp.CallToolResult, any, error) {
 				if in.Status == "" {

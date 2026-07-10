@@ -17,9 +17,9 @@ import (
 var errFileNotInRevision = e.New("file is not part of the revision")
 
 type getFileDiffInput struct {
-	Change   string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
-	File     string `json:"file" jsonschema:"File path within the change; /COMMIT_MSG addresses the commit message"`
-	Revision string `json:"revision,omitempty" jsonschema:"Patch set number or SHA, defaults to current"`
+	Change   string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
+	File     string `json:"file" jsonschema:"File path exactly as list_change_files reports it; /COMMIT_MSG for the commit message"`
+	Revision string `json:"revision,omitempty" jsonschema:"Patch set number (1, 2, ...) or revision SHA; omit for the newest patch set"`
 }
 
 func getFileDiff(c *gerritclient.Client) Tool {
@@ -29,7 +29,9 @@ func getFileDiff(c *gerritclient.Client) Tool {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameGetFileDiff,
 				Description: "Fetch the diff of one file in a Gerrit change revision. Lines are " +
-					"prefixed unified-diff style: space for context, - for deleted, + for added.",
+					"prefixed unified-diff style: space for context, - for deleted, + for added; " +
+					"a skip marker stands in for long unchanged stretches. Take file paths from " +
+					"list_change_files; /COMMIT_MSG diffs the commit message.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in getFileDiffInput) (*mcp.CallToolResult, any, error) {
 				diff, err := c.GetDiff(ctx, in.Change, in.Revision, in.File)
 				if err != nil {
