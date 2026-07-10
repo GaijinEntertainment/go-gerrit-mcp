@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"strconv"
 	"strings"
 
 	"dev.gaijin.team/go/golib/e"
@@ -42,6 +43,7 @@ var (
 	errUnknownGroups = e.New("unknown capability groups")
 	errNoGroups      = e.New("no capability groups enabled")
 	errParseFlags    = e.New("parse flags")
+	errInvalidBool   = e.New("invalid boolean flag value")
 )
 
 // Config is the resolved server configuration.
@@ -62,6 +64,10 @@ type Config struct {
 	// Projects, when non-empty, confines every operation to the listed
 	// Gerrit projects.
 	Projects []string
+	// AllowForeignChanges disables the own-changes restriction: when false
+	// (the default), trail-leaving operations are refused on changes not
+	// owned by the authenticated account.
+	AllowForeignChanges bool
 }
 
 // behaviorFlag is one CLI flag with its GERRIT_MCP_* env mirror. The flag
@@ -103,23 +109,40 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		usage:    "comma-separated Gerrit project allowlist confining every operation",
 		fallback: "",
 	}
+	ownChanges := behaviorFlag{
+		name:     "own-changes-only",
+		mirror:   "GERRIT_MCP_OWN_CHANGES_ONLY",
+		usage:    "refuse trail-leaving operations on changes not owned by the authenticated account",
+		fallback: "true",
+	}
 
-	err := resolveFlags(args, getenv, []*behaviorFlag{&groups, &includeTools, &excludeTools, &projects})
+	err := resolveFlags(args, getenv, []*behaviorFlag{&groups, &includeTools, &excludeTools, &projects, &ownChanges})
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &Config{
-		GerritURL:    getenv(EnvURL),
-		Username:     getenv(EnvUsername),
-		Token:        getenv(EnvToken),
-		Groups:       nil,
-		IncludeTools: splitList(includeTools.value),
-		ExcludeTools: splitList(excludeTools.value),
-		Projects:     splitList(projects.value),
+		GerritURL:           getenv(EnvURL),
+		Username:            getenv(EnvUsername),
+		Token:               getenv(EnvToken),
+		Groups:              nil,
+		IncludeTools:        splitList(includeTools.value),
+		ExcludeTools:        splitList(excludeTools.value),
+		Projects:            splitList(projects.value),
+		AllowForeignChanges: false,
 	}
 
 	errs := missingEnv(cfg)
+
+	ownOnly, err := strconv.ParseBool(strings.TrimSpace(ownChanges.value))
+	if err != nil {
+		errs = append(errs, errInvalidBool.WithFields(
+			fields.F("flag", ownChanges.name),
+			fields.F("value", ownChanges.value),
+		))
+	} else {
+		cfg.AllowForeignChanges = !ownOnly
+	}
 
 	parsed, err := parseGroups(groups.value)
 	if err != nil {

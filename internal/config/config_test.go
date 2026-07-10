@@ -190,6 +190,63 @@ func Test_Load_Lists(t *testing.T) {
 	})
 }
 
+func Test_Load_OwnChanges(t *testing.T) {
+	t.Parallel()
+
+	t.Run("restriction on by default", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load(nil, env(secrets()))
+		require.NoError(t, err)
+		assert.False(t, cfg.AllowForeignChanges)
+	})
+
+	t.Run("flag disables restriction", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{"--own-changes-only=false"}, env(secrets()))
+		require.NoError(t, err)
+		assert.True(t, cfg.AllowForeignChanges)
+	})
+
+	t.Run("env mirror disables restriction", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_OWN_CHANGES_ONLY"] = "false"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.True(t, cfg.AllowForeignChanges)
+	})
+
+	t.Run("flag wins over env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_OWN_CHANGES_ONLY"] = "false"
+
+		cfg, err := config.Load([]string{"--own-changes-only=true"}, env(m))
+		require.NoError(t, err)
+		assert.False(t, cfg.AllowForeignChanges)
+	})
+
+	t.Run("invalid bool reported with other errors", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+		delete(m, "GERRIT_TOKEN")
+
+		_, err := config.Load([]string{"--own-changes-only=nope"}, env(m))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid boolean flag value")
+		assert.ErrorContains(t, err, "own-changes-only")
+		assert.ErrorContains(t, err, "GERRIT_TOKEN")
+	})
+}
+
 func Test_Load_Connection(t *testing.T) {
 	t.Parallel()
 
