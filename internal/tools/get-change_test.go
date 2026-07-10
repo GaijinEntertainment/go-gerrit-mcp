@@ -65,6 +65,8 @@ func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
 	require.NoError(t, err)
 
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	mcpServer.AddReceivingMiddleware(tools.WrapErrors)
+
 	for _, tool := range tools.All(client) {
 		tool.Register(mcpServer)
 	}
