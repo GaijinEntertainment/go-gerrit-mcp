@@ -155,6 +155,41 @@ func Test_Load_Errors(t *testing.T) {
 	})
 }
 
+func Test_Load_Lists(t *testing.T) {
+	t.Parallel()
+
+	t.Run("filters and projects parse from flags", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{
+			"--include-tools", "get_change, search_changes",
+			"--exclude-tools", "get_file_diff",
+			"--projects", " core ,infra, ",
+		}, env(secrets()))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"get_change", "search_changes"}, cfg.IncludeTools)
+		assert.Equal(t, []string{"get_file_diff"}, cfg.ExcludeTools)
+		assert.Equal(t, []string{"core", "infra"}, cfg.Projects)
+	})
+
+	t.Run("lists resolve from env mirrors", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_PROJECTS"] = "core"
+		m["GERRIT_MCP_EXCLUDE_TOOLS"] = "search_changes"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"core"}, cfg.Projects)
+		assert.Equal(t, []string{"search_changes"}, cfg.ExcludeTools)
+		assert.Nil(t, cfg.IncludeTools)
+	})
+}
+
 func Test_Load_Connection(t *testing.T) {
 	t.Parallel()
 

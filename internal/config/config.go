@@ -54,6 +54,14 @@ type Config struct {
 	Token string
 	// Groups are the enabled capability groups, deduplicated, in input order.
 	Groups []Group
+	// IncludeTools, when non-empty, keeps only the listed tools from the
+	// group-resolved set. It never activates tools outside enabled groups.
+	IncludeTools []string
+	// ExcludeTools removes the listed tools from the group-resolved set.
+	ExcludeTools []string
+	// Projects, when non-empty, confines every operation to the listed
+	// Gerrit projects.
+	Projects []string
 }
 
 // behaviorFlag is one CLI flag with its GERRIT_MCP_* env mirror. The flag
@@ -77,16 +85,38 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		usage:    "comma-separated capability groups to enable: read, comment, transition",
 		fallback: defaultGroups,
 	}
+	includeTools := behaviorFlag{
+		name:     "include-tools",
+		mirror:   "GERRIT_MCP_INCLUDE_TOOLS",
+		usage:    "comma-separated tool names to keep from the group-resolved set; never activates gated tools",
+		fallback: "",
+	}
+	excludeTools := behaviorFlag{
+		name:     "exclude-tools",
+		mirror:   "GERRIT_MCP_EXCLUDE_TOOLS",
+		usage:    "comma-separated tool names to remove from the group-resolved set",
+		fallback: "",
+	}
+	projects := behaviorFlag{
+		name:     "projects",
+		mirror:   "GERRIT_MCP_PROJECTS",
+		usage:    "comma-separated Gerrit project allowlist confining every operation",
+		fallback: "",
+	}
 
-	if err := resolveFlags(args, getenv, []*behaviorFlag{&groups}); err != nil {
+	err := resolveFlags(args, getenv, []*behaviorFlag{&groups, &includeTools, &excludeTools, &projects})
+	if err != nil {
 		return nil, err
 	}
 
 	cfg := &Config{
-		GerritURL: getenv(EnvURL),
-		Username:  getenv(EnvUsername),
-		Token:     getenv(EnvToken),
-		Groups:    nil,
+		GerritURL:    getenv(EnvURL),
+		Username:     getenv(EnvUsername),
+		Token:        getenv(EnvToken),
+		Groups:       nil,
+		IncludeTools: splitList(includeTools.value),
+		ExcludeTools: splitList(excludeTools.value),
+		Projects:     splitList(projects.value),
 	}
 
 	errs := missingEnv(cfg)
@@ -151,6 +181,20 @@ func missingEnv(cfg *Config) []error {
 	}
 
 	return errs
+}
+
+// splitList splits a comma-separated list, trimming whitespace and dropping
+// empty entries. An empty input yields nil.
+func splitList(s string) []string {
+	var out []string
+
+	for part := range strings.SplitSeq(s, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+
+	return out
 }
 
 func parseGroups(s string) ([]Group, error) {
