@@ -37,3 +37,35 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
       - run: go test -race ./...
+
+  release-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean
+      - name: image smoke test
+        # The image must start, print an actionable error, and exit non-zero
+        # when required env is missing.
+        run: |
+          img=$(docker image ls --format '{{.Repository}}:{{.Tag}}' ghcr.io/gaijinentertainment/go-gerrit-mcp \
+            | grep -- '-amd64$' | head -n 1)
+          [[ -n "$img" ]] || { echo "no snapshot image found" >&2; exit 1; }
+
+          set +e
+          out=$(docker run --rm "$img" 2>&1)
+          code=$?
+          set -e
+
+          printf '%s\n' "$out"
+          [[ "$code" -ne 0 ]] || { echo "image must exit non-zero without env" >&2; exit 1; }
+          grep -q GERRIT_URL <<<"$out" || { echo "error must name the missing env var" >&2; exit 1; }
