@@ -2,6 +2,8 @@ package gerritclient
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -28,6 +30,9 @@ const CurrentRevision = "current"
 // fieldDetailedAccounts is the o= option filling account name/username on
 // owner and reviewer entries.
 const fieldDetailedAccounts = "DETAILED_ACCOUNTS"
+
+// fieldAllRevisions is the o= option listing every patch set of a change.
+const fieldAllRevisions = "ALL_REVISIONS"
 
 // changeDetailFields returns the o= options requested for a single-change
 // fetch: enough for an agent to understand the review state and for write
@@ -57,7 +62,7 @@ func (c *Client) GetChange(ctx context.Context, id string) (*gerrit.ChangeInfo, 
 	}
 
 	if !c.projectAllowed(info.Project) {
-		return nil, c.scopeError(id)
+		return nil, c.scopeError(id, info.Project)
 	}
 
 	return info, nil
@@ -69,11 +74,60 @@ func (c *Client) projectAllowed(project string) bool {
 	return len(c.projects) == 0 || slices.Contains(c.projects, project)
 }
 
-func (c *Client) scopeError(changeID string) error {
-	return ErrProjectScope.WithFields(
+// scopeError names the change's actual project when known so the agent
+// learns where the change lives, not only that it is out of scope.
+func (c *Client) scopeError(changeID, project string) error {
+	err := ErrProjectScope.WithFields(
 		fields.F("change", changeID),
 		fields.F("projects", strings.Join(c.projects, ",")),
 	)
+
+	if project != "" {
+		err = err.WithField("change_project", project)
+	}
+
+	return err
+}
+
+// patchSetFields enumerates the patch sets a change actually has. Attached
+// to revision-addressing 404s so the caller can pick a valid patch set
+// instead of guessing again; best-effort — empty when the change itself is
+// unresolvable.
+func (c *Client) patchSetFields(ctx context.Context, changeID string) []fields.Field {
+	opt := &gerrit.ChangeOptions{AdditionalFields: []string{fieldAllRevisions}}
+
+	info, _, err := c.gerrit.Changes.GetChange(ctx, changeID, opt)
+	if err != nil || info == nil || len(info.Revisions) == 0 {
+		return nil
+	}
+
+	var last, current int
+
+	for sha, rev := range info.Revisions {
+		last = max(last, rev.Number)
+
+		if sha == info.CurrentRevision {
+			current = rev.Number
+		}
+	}
+
+	patchSets := "1"
+	if last > 1 {
+		patchSets = fmt.Sprintf("1-%d", last)
+	}
+
+	ff := []fields.Field{fields.F("valid_patch_sets", patchSets)}
+	if current > 0 {
+		ff = append(ff, fields.F("current_patch_set", current))
+	}
+
+	return ff
+}
+
+// revisionNotFound reports whether a revision-addressing call failed because
+// the addressed revision (rather than the change) does not exist.
+func revisionNotFound(resp *gerrit.Response, revision string) bool {
+	return resp != nil && resp.StatusCode == http.StatusNotFound && revision != CurrentRevision
 }
 
 // scopedQuery forces the project allowlist into a change query regardless of
@@ -108,7 +162,7 @@ func (c *Client) checkProjectScope(ctx context.Context, changeID string) error {
 
 	if project, _, ok := strings.Cut(changeID, "~"); ok {
 		if !c.projectAllowed(project) {
-			return c.scopeError(changeID)
+			return c.scopeError(changeID, project)
 		}
 
 		return nil
@@ -119,8 +173,12 @@ func (c *Client) checkProjectScope(ctx context.Context, changeID string) error {
 		return ErrGetChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
 
-	if info == nil || !c.projectAllowed(info.Project) {
-		return c.scopeError(changeID)
+	if info == nil {
+		return c.scopeError(changeID, "")
+	}
+
+	if !c.projectAllowed(info.Project) {
+		return c.scopeError(changeID, info.Project)
 	}
 
 	return nil
@@ -171,8 +229,12 @@ func (c *Client) ListFiles(ctx context.Context, changeID, revision string) (map[
 
 	files, resp, err := c.gerrit.Changes.ListFiles(ctx, changeID, revision, nil)
 	if err != nil {
-		return nil, ErrListFiles.Wrap(apiError(resp, err),
-			fields.F("change", changeID), fields.F("revision", revision))
+		ff := []fields.Field{fields.F("change", changeID), fields.F("revision", revision)}
+		if revisionNotFound(resp, revision) {
+			ff = append(ff, c.patchSetFields(ctx, changeID)...)
+		}
+
+		return nil, ErrListFiles.Wrap(apiError(resp, err), ff...)
 	}
 
 	return files, nil
@@ -191,8 +253,14 @@ func (c *Client) GetDiff(ctx context.Context, changeID, revision, path string) (
 
 	diff, resp, err := c.gerrit.Changes.GetDiff(ctx, changeID, revision, path, nil)
 	if err != nil {
-		return nil, ErrGetDiff.Wrap(apiError(resp, err),
-			fields.F("change", changeID), fields.F("revision", revision), fields.F("file", path))
+		ff := []fields.Field{
+			fields.F("change", changeID), fields.F("revision", revision), fields.F("file", path),
+		}
+		if revisionNotFound(resp, revision) {
+			ff = append(ff, c.patchSetFields(ctx, changeID)...)
+		}
+
+		return nil, ErrGetDiff.Wrap(apiError(resp, err), ff...)
 	}
 
 	if diff == nil {
