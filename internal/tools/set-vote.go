@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"net/http"
+	"slices"
 	"strings"
 
 	"dev.gaijin.team/go/golib/e"
@@ -44,7 +46,7 @@ func setVote(c *gerritclient.Client) Tool {
 				}
 
 				if _, err := c.SetReview(ctx, in.Change, "", input); err != nil {
-					return nil, nil, err
+					return nil, nil, enrichVoteError(ctx, c, in.Change, err)
 				}
 
 				return textResult(llmxml.NewElement("vote_set",
@@ -55,4 +57,27 @@ func setVote(c *gerritclient.Client) Tool {
 			})
 		},
 	}
+}
+
+// enrichVoteError appends the change's configured labels to a Gerrit vote
+// rejection, so a wrong label or range needs no second guess. Best-effort:
+// an unfetchable label set returns the error unchanged.
+func enrichVoteError(ctx context.Context, c *gerritclient.Client, change string, err error) error {
+	if gerritclient.APIStatus(err) != http.StatusBadRequest {
+		return err
+	}
+
+	info, ierr := c.GetChange(ctx, change)
+	if ierr != nil || len(info.Labels) == 0 {
+		return err
+	}
+
+	names := make([]string, 0, len(info.Labels))
+	for name := range info.Labels {
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+
+	return e.From(err).WithField("configured_labels", strings.Join(names, ", "))
 }

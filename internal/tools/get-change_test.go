@@ -46,13 +46,13 @@ const changeJSON = ")]}'\n" + `{
 
 // session spins a fake Gerrit plus an in-memory MCP server/client pair with
 // the read-group tool registered, and returns the connected client session.
-func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
+func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*config.Config)) *mcp.ClientSession {
 	t.Helper()
 
 	srv := httptest.NewServer(gerritHandler)
 	t.Cleanup(srv.Close)
 
-	client, err := gerritclient.New(t.Context(), &config.Config{
+	cfg := &config.Config{
 		GerritURL:           srv.URL,
 		Username:            "bot",
 		Token:               "s3cret",
@@ -61,7 +61,12 @@ func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
 		ExcludeTools:        nil,
 		Projects:            nil,
 		AllowForeignChanges: false,
-	})
+	}
+	for _, m := range mutate {
+		m(cfg)
+	}
+
+	client, err := gerritclient.New(t.Context(), cfg)
 	require.NoError(t, err)
 
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)

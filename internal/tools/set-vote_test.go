@@ -101,8 +101,12 @@ func Test_SetVote(t *testing.T) {
 		assert.Empty(t, *body, "no review may be posted")
 	})
 
-	t.Run("gerrit label rejection surfaced verbatim", func(t *testing.T) {
+	t.Run("gerrit label rejection carries the configured labels", func(t *testing.T) {
 		t.Parallel()
+
+		const labeledChangeJSON = ")]}'\n" + `{"_number":123,"project":"core","branch":"main",` +
+			`"owner":{"_account_id":42,"username":"bot"},` +
+			`"labels":{"Code-Review":{},"Verified":{}}}`
 
 		cs := session(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
@@ -115,7 +119,7 @@ func Test_SetVote(t *testing.T) {
 				_, _ = w.Write([]byte(`label "Bogus" is not a configured label`))
 
 			default:
-				_, _ = w.Write([]byte(ownChangeJSON))
+				_, _ = w.Write([]byte(labeledChangeJSON))
 			}
 		})
 
@@ -129,6 +133,7 @@ func Test_SetVote(t *testing.T) {
 		text, ok := res.Content[0].(*mcp.TextContent)
 		require.True(t, ok)
 		assert.Contains(t, text.Text, `label "Bogus" is not a configured label`)
+		assert.Contains(t, text.Text, "configured_labels=Code-Review, Verified")
 	})
 
 	t.Run("foreign change refused by own-changes restriction", func(t *testing.T) {

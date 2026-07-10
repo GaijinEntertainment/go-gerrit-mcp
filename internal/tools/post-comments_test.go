@@ -18,6 +18,9 @@ const ownChangeJSON = ")]}'\n" + `{"_number":123,"project":"core","branch":"main
 const existingCommentsJSON = ")]}'\n" + `{"core/scanner.go":[` +
 	`{"id":"c1","line":10,"message":"root","updated":"2026-07-01 10:00:00.000000000"}]}`
 
+const revisionFilesJSON = ")]}'\n" + `{"/COMMIT_MSG":{"status":"A"},` +
+	`"core/scanner.go":{},"docs/readme.md":{}}`
+
 // postSession wires a fake Gerrit for the comment flow: self-check, change
 // resolve (owned by self), comments listing, and a recording review POST.
 func postSession(t *testing.T) (cs *mcp.ClientSession, body *map[string]any) {
@@ -47,6 +50,8 @@ func postSession(t *testing.T) (cs *mcp.ClientSession, body *map[string]any) {
 
 		case strings.HasSuffix(r.URL.Path, "/comments"):
 			_, _ = w.Write([]byte(existingCommentsJSON))
+		case strings.HasSuffix(r.URL.Path, "/files/"):
+			_, _ = w.Write([]byte(revisionFilesJSON))
 		default:
 			_, _ = w.Write([]byte(ownChangeJSON))
 		}
@@ -102,6 +107,47 @@ func Test_PostComments(t *testing.T) {
 		readme, ok := comments["docs/readme.md"].([]any)
 		require.True(t, ok)
 		require.Len(t, readme, 1)
+	})
+
+	t.Run("comment on unknown file refused with proposals", func(t *testing.T) {
+		t.Parallel()
+
+		cs, body := postSession(t)
+
+		res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{
+			Name: "post_comments",
+			Arguments: map[string]any{
+				"change": "123",
+				"comments": []map[string]any{
+					{"file": "core/scaner.go", "message": "typo in path"},
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.True(t, res.IsError)
+
+		text, ok := res.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, text.Text, "not part of the current revision")
+		assert.Contains(t, text.Text, "did_you_mean=core/scanner.go")
+
+		assert.Empty(t, *body, "no review may be posted")
+	})
+
+	t.Run("reply is exempt from the file existence check", func(t *testing.T) {
+		t.Parallel()
+
+		cs, body := postSession(t)
+
+		out := callTool(t, cs, "post_comments", map[string]any{
+			"change": "123",
+			"comments": []map[string]any{
+				{"file": "core/removed-in-ps2.go", "message": "still relevant", "reply_to": "c1"},
+			},
+		})
+
+		assert.Equal(t, `<review_posted change="123" message="false" comments="1" notify="ALL"/>`, out)
+		assert.NotEmpty(t, *body, "reply must reach Gerrit despite its file missing from the current revision")
 	})
 
 	t.Run("unknown reply target refused", func(t *testing.T) {
