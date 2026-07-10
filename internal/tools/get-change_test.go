@@ -53,10 +53,13 @@ func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
 	t.Cleanup(srv.Close)
 
 	client, err := gerritclient.New(t.Context(), &config.Config{
-		GerritURL: srv.URL,
-		Username:  "bot",
-		Token:     "s3cret",
-		Groups:    []config.Group{config.GroupRead},
+		GerritURL:    srv.URL,
+		Username:     "bot",
+		Token:        "s3cret",
+		Groups:       []config.Group{config.GroupRead},
+		IncludeTools: nil,
+		ExcludeTools: nil,
+		Projects:     nil,
 	})
 	require.NoError(t, err)
 
