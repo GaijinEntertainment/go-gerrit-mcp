@@ -1,0 +1,39 @@
+version: 2
+
+project_name: go-gerrit-mcp
+
+builds:
+  - main: ./cmd/go-gerrit-mcp
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+dockers_v2:
+  - images:
+      - ghcr.io/gaijinentertainment/go-gerrit-mcp
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: "{{ .GitURL }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
