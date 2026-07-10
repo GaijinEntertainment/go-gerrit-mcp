@@ -1,0 +1,3 @@
+<error tool="search_changes">
+validating "arguments": validating root: required: missing properties: ["query"]
+</error>

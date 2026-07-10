@@ -53,6 +53,7 @@ func run(lgr *slog.Logger) error {
 		&mcp.Implementation{Name: serverName, Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
+	srv.AddReceivingMiddleware(tools.WrapErrors)
 
 	enabled, err := registry.Resolve(cfg)
 	if err != nil {
