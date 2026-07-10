@@ -1,0 +1,4 @@
+<changes query="status:open owner:self" start="0" count="2" more="true">
+<change number="1" project="core" branch="main" status="NEW" owner="Alice (alice)" updated="2026-07-01T10:00:00Z">First</change>
+<change number="2" project="core" branch="main" status="MERGED" owner="Bob (bob)" updated="2026-07-02T10:00:00Z">Second</change>
+</changes>

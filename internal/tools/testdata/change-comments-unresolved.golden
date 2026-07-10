@@ -1,0 +1,9 @@
+<comments change="123" filter="unresolved" threads="1">
+<file path="core/scanner.go">
+<thread resolved="false">
+<comment id="c3" author="Bob (bob)" date="2026-07-02T09:00:00Z" patch_set="2" lines="20-25">
+This block races
+</comment>
+</thread>
+</file>
+</comments>

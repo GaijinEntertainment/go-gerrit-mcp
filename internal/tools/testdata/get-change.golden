@@ -1,0 +1,16 @@
+<change number="123" project="core" branch="main" status="NEW" owner="Alice (alice)" created="2026-07-01T10:00:00Z" updated="2026-07-02T11:30:00Z" submittable="true" current_revision="abc123def">
+<subject>Fix nil deref in scanner</subject>
+<labels>
+<label name="Code-Review">
+<vote value="2" by="Bob (bob)"/>
+</label>
+</labels>
+<reviewers>
+<reviewer state="REVIEWER">Bob (bob)</reviewer>
+</reviewers>
+<messages>
+<message author="Bob (bob)" date="2026-07-02T11:30:00Z" revision="2">
+Looks good to me
+</message>
+</messages>
+</change>
