@@ -13,8 +13,8 @@ import (
 )
 
 type listChangeFilesInput struct {
-	Change   string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
-	Revision string `json:"revision,omitempty" jsonschema:"Patch set number or SHA, defaults to current"`
+	Change   string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
+	Revision string `json:"revision,omitempty" jsonschema:"Patch set number (1, 2, ...) or revision SHA; omit for the newest patch set"`
 }
 
 func listChangeFiles(c *gerritclient.Client) Tool {
@@ -23,8 +23,11 @@ func listChangeFiles(c *gerritclient.Client) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameListChangeFiles,
-				Description: "List the files of a Gerrit change revision with per-file change status " +
-					"and inserted/deleted line counts.",
+				Description: "List the files a Gerrit change revision touches, with per-file status " +
+					"(A added, M modified, D deleted, R renamed with old_path), inserted/deleted " +
+					"line counts, and a binary flag. The paths returned here are the valid file " +
+					"arguments for get_file_diff and post_comments; /COMMIT_MSG is the commit " +
+					"message rendered as a file.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in listChangeFilesInput) (*mcp.CallToolResult, any, error) {
 				files, err := c.ListFiles(ctx, in.Change, in.Revision)
 				if err != nil {

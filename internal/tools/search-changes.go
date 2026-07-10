@@ -19,9 +19,9 @@ var (
 )
 
 type searchChangesInput struct {
-	Query string `json:"query" jsonschema:"Gerrit change query string"`
+	Query string `json:"query" jsonschema:"Gerrit change query, e.g. status:open owner:self; operators are listed in the tool description"`
 	Limit int    `json:"limit,omitempty" jsonschema:"Maximum results per page, default 25"`
-	Start int    `json:"start,omitempty" jsonschema:"Number of results to skip, for pagination"`
+	Start int    `json:"start,omitempty" jsonschema:"Results to skip; advance by limit while a page reports more=true"`
 }
 
 func searchChanges(c *gerritclient.Client) Tool {
@@ -34,8 +34,9 @@ func searchChanges(c *gerritclient.Client) Tool {
 					"Common operators: status:open|merged|abandoned, owner:USERNAME or owner:self, " +
 					"project:NAME, branch:NAME, topic:NAME, label:Code-Review=+2, message:TEXT, " +
 					"file:PATH, age:2d, is:wip. Terms combine with AND; use OR for alternatives and " +
-					"- for negation; quote multi-word values. Paginate via limit/start and the " +
-					"more attribute of the result.",
+					"- for negation; quote multi-word values. Each result is a one-line change " +
+					"summary; pass its number to get_change for the full review state. Paginate " +
+					"via limit/start; more=\"true\" on the result signals further pages.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in searchChangesInput) (*mcp.CallToolResult, any, error) {
 				if in.Limit <= 0 {
 					in.Limit = defaultSearchLimit

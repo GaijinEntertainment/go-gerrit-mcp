@@ -14,7 +14,7 @@ import (
 )
 
 type getChangeInput struct {
-	Change string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
+	Change string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
 }
 
 func getChange(c *gerritclient.Client) Tool {
@@ -23,8 +23,11 @@ func getChange(c *gerritclient.Client) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameGetChange,
-				Description: "Fetch a Gerrit change: status, owner, labels with votes, reviewers, " +
-					"change messages, and the current revision.",
+				Description: "Fetch one Gerrit change's review state: status, owner, submittability, " +
+					"labels with votes, reviewers, and the change-message timeline. Change messages " +
+					"are patch-set and reviewer announcements, not the inline code discussion — " +
+					"read that with get_change_comments. Also reports the current revision SHA, " +
+					"usable as the revision argument of other tools.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in getChangeInput) (*mcp.CallToolResult, any, error) {
 				info, err := c.GetChange(ctx, in.Change)
 				if err != nil {

@@ -17,7 +17,7 @@ import (
 var errVoteNoLabel = e.New("vote label must not be empty")
 
 type setVoteInput struct {
-	Change  string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
+	Change  string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
 	Label   string `json:"label" jsonschema:"Label name, e.g. Code-Review or Verified"`
 	Value   int    `json:"value" jsonschema:"Numeric vote within the label's range; 0 clears an own vote"`
 	Message string `json:"message,omitempty" jsonschema:"Optional message accompanying the vote"`
@@ -29,10 +29,13 @@ func setVote(c *gerritclient.Client) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameSetVote,
-				Description: "Set a vote on a Gerrit change: label name plus numeric value, with an " +
-					"optional message. Value 0 clears an own vote. Gerrit validates the label and " +
-					"range; its refusal is reported verbatim. Refused on changes not owned by the " +
-					"authenticated account unless the operator disabled the own-changes restriction.",
+				Description: "Set this account's vote on one label of a Gerrit change, e.g. " +
+					"Code-Review 2 or Verified 1; each label's range is configured per project, " +
+					"commonly -2..+2 for Code-Review. Value 0 clears the account's own vote. An " +
+					"unknown label or out-of-range value is refused by Gerrit verbatim and the " +
+					"error lists the change's configured labels. Refused on changes not owned by " +
+					"the authenticated account unless the operator disabled the own-changes " +
+					"restriction.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in setVoteInput,
 			) (*mcp.CallToolResult, any, error) {
 				label := strings.TrimSpace(in.Label)

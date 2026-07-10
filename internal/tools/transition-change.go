@@ -17,7 +17,7 @@ var (
 )
 
 type transitionChangeInput struct {
-	Change  string `json:"change" jsonschema:"Change identifier: numeric ID, project~number, or Change-Id"`
+	Change  string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
 	Action  string `json:"action" jsonschema:"One of: submit, abandon, restore, wip, ready"`
 	Message string `json:"message,omitempty" jsonschema:"Optional message; not accepted for submit"`
 }

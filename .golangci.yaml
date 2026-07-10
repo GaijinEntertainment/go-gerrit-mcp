@@ -259,6 +259,11 @@ linters:
         linters:
           - funlen
           - goconst
+      # Struct tags cannot wrap; jsonschema tags carry model-facing field
+      # descriptions whose clarity outranks line length.
+      - source: 'jsonschema:"'
+        linters:
+          - lll
     paths:
       - .*\.gen\.go$ # ignore generated files
 
