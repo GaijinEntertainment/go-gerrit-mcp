@@ -25,13 +25,17 @@ var (
 // CurrentRevision addresses the latest patch set of a change.
 const CurrentRevision = "current"
 
+// fieldDetailedAccounts is the o= option filling account name/username on
+// owner and reviewer entries.
+const fieldDetailedAccounts = "DETAILED_ACCOUNTS"
+
 // changeDetailFields returns the o= options requested for a single-change
 // fetch: enough for an agent to understand the review state and for write
 // flows to source their identifiers (revision, labels, accounts).
 func changeDetailFields() []string {
 	return []string{
 		"DETAILED_LABELS",
-		"DETAILED_ACCOUNTS",
+		fieldDetailedAccounts,
 		"CURRENT_REVISION",
 		"MESSAGES",
 		"SUBMITTABLE",
@@ -137,7 +141,7 @@ func (c *Client) QueryChanges(ctx context.Context, query string, limit, start in
 	opt.Query = []string{c.scopedQuery(query)}
 	opt.Limit = limit
 	opt.Start = start
-	opt.AdditionalFields = []string{"DETAILED_ACCOUNTS"}
+	opt.AdditionalFields = []string{fieldDetailedAccounts}
 
 	res, resp, err := c.gerrit.Changes.QueryChanges(ctx, opt)
 	if err != nil {
