@@ -27,9 +27,16 @@ go-gerrit-mcp --groups read,comment,transition --own-changes-only=false --projec
 
 ## Install
 
-**Binary release** — download the archive for your platform from
-[GitHub Releases](https://github.com/GaijinEntertainment/go-gerrit-mcp/releases), unpack, and put `go-gerrit-mcp` on
-your `PATH`.
+**Binary release** — download the binary for your platform from
+[GitHub Releases](https://github.com/GaijinEntertainment/go-gerrit-mcp/releases), make it executable, and put it on
+your `PATH`:
+
+```sh
+# macOS on Apple silicon; substitute <os>_<arch> from: linux, darwin, windows x amd64, arm64
+curl -Lo /usr/local/bin/go-gerrit-mcp \
+  https://github.com/GaijinEntertainment/go-gerrit-mcp/releases/latest/download/go-gerrit-mcp_darwin_arm64
+chmod +x /usr/local/bin/go-gerrit-mcp
+```
 
 **Docker:**
 

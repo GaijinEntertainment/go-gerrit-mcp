@@ -12,11 +12,12 @@ builds:
       - -s -w -X main.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# Bare per-platform binaries: a single static executable needs no unpack
+# step, and checksums.txt covers the files directly. Names carry no version
+# so the releases/latest/download URLs stay stable across releases.
 archives:
-  - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+  - formats: [binary]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 
 dockers_v2:
   - images:
