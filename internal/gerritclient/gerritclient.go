@@ -39,6 +39,9 @@ type Client struct {
 	// projects, when non-empty, confines every operation to the listed
 	// Gerrit projects (see docs/glossary.md: Project scoping).
 	projects []string
+	// allowForeign disables the own-changes restriction on trail-leaving
+	// operations (see docs/glossary.md: Own-changes restriction).
+	allowForeign bool
 }
 
 // New builds an authenticated client and validates the credentials against
@@ -61,7 +64,12 @@ func New(ctx context.Context, cfg *config.Config) (*Client, error) {
 		return nil, ErrCredentials.Wrap(errEmptyResponse)
 	}
 
-	return &Client{gerrit: g, self: *self, projects: cfg.Projects}, nil
+	return &Client{
+		gerrit:       g,
+		self:         *self,
+		projects:     cfg.Projects,
+		allowForeign: cfg.AllowForeignChanges,
+	}, nil
 }
 
 // Self reports the authenticated account as validated at startup.
