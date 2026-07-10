@@ -17,6 +17,7 @@ const (
 	NameGetFileDiff       = "get_file_diff"
 	NameGetChangeComments = "get_change_comments"
 	NamePostComments      = "post_comments"
+	NameSetVote           = "set_vote"
 )
 
 // Tool binds a tool name to its MCP registration.
@@ -35,6 +36,7 @@ func All(c *gerritclient.Client) []Tool {
 		getFileDiff(c),
 		getChangeComments(c),
 		postComments(c),
+		setVote(c),
 	}
 }
 

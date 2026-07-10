@@ -104,7 +104,7 @@ func Test_GetChange(t *testing.T) {
 
 		assert.ElementsMatch(t, []string{
 			"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
-			"post_comments",
+			"post_comments", "set_vote",
 		}, names)
 	})
 
