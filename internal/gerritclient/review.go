@@ -27,7 +27,11 @@ func (c *Client) checkWriteScope(ctx context.Context, changeID string) error {
 		return nil
 	}
 
-	info, resp, err := c.gerrit.Changes.GetChange(ctx, changeID, nil)
+	// DETAILED_ACCOUNTS fills the owner's username so a refusal can name
+	// who owns the change instead of an opaque account id.
+	opt := &gerrit.ChangeOptions{AdditionalFields: []string{fieldDetailedAccounts}}
+
+	info, resp, err := c.gerrit.Changes.GetChange(ctx, changeID, opt)
 	if err != nil {
 		return ErrGetChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
