@@ -1,0 +1,36 @@
+# fkn MacOS..
+.DS_Store
+
+# IDEA and its shareable configs
+# globs are matched against the repo root, hence two more patterns for nested entities
+.idea/*
+!.idea/scopes/
+**/.idea/*
+!**/.idea/scopes/
+
+.vscode/
+
+# Go build artifacts
+/go-gerrit-mcp
+/dist/
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test / coverage output
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Env & local config
+*.env
+development.env
+.config.yaml
+
+# Claude Code local overrides
+.claude/settings.local.json
+.claude/*.local.json
