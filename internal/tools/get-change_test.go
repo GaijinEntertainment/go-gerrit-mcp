@@ -53,13 +53,14 @@ func session(t *testing.T, gerritHandler http.HandlerFunc) *mcp.ClientSession {
 	t.Cleanup(srv.Close)
 
 	client, err := gerritclient.New(t.Context(), &config.Config{
-		GerritURL:    srv.URL,
-		Username:     "bot",
-		Token:        "s3cret",
-		Groups:       []config.Group{config.GroupRead},
-		IncludeTools: nil,
-		ExcludeTools: nil,
-		Projects:     nil,
+		GerritURL:           srv.URL,
+		Username:            "bot",
+		Token:               "s3cret",
+		Groups:              []config.Group{config.GroupRead},
+		IncludeTools:        nil,
+		ExcludeTools:        nil,
+		Projects:            nil,
+		AllowForeignChanges: false,
 	})
 	require.NoError(t, err)
 
@@ -103,6 +104,7 @@ func Test_GetChange(t *testing.T) {
 
 		assert.ElementsMatch(t, []string{
 			"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
+			"post_comments",
 		}, names)
 	})
 

@@ -13,13 +13,14 @@ import (
 
 func cfg(groups []config.Group, include, exclude []string) *config.Config {
 	return &config.Config{
-		GerritURL:    "https://gerrit.example.com",
-		Username:     "bot",
-		Token:        "s3cret",
-		Groups:       groups,
-		IncludeTools: include,
-		ExcludeTools: exclude,
-		Projects:     nil,
+		GerritURL:           "https://gerrit.example.com",
+		Username:            "bot",
+		Token:               "s3cret",
+		Groups:              groups,
+		IncludeTools:        include,
+		ExcludeTools:        exclude,
+		Projects:            nil,
+		AllowForeignChanges: false,
 	}
 }
 
@@ -65,8 +66,26 @@ func Test_Resolve(t *testing.T) {
 			want:        allReadTools(),
 		},
 		{
-			name:        "write groups expose nothing yet",
-			giveGroups:  []config.Group{config.GroupComment, config.GroupTransition},
+			name:        "comment group bundles its read subset",
+			giveGroups:  []config.Group{config.GroupComment},
+			giveInclude: nil,
+			giveExclude: nil,
+			want: []string{
+				tools.NameGetChange,
+				tools.NameGetChangeComments,
+				tools.NamePostComments,
+			},
+		},
+		{
+			name:        "read and comment union deduplicates",
+			giveGroups:  []config.Group{config.GroupRead, config.GroupComment},
+			giveInclude: nil,
+			giveExclude: nil,
+			want:        append(allReadTools(), tools.NamePostComments),
+		},
+		{
+			name:        "transition group exposes nothing yet",
+			giveGroups:  []config.Group{config.GroupTransition},
 			giveInclude: nil,
 			giveExclude: nil,
 			want:        nil,
@@ -102,7 +121,7 @@ func Test_Resolve(t *testing.T) {
 		{
 			name:        "include never escalates beyond enabled groups",
 			giveGroups:  []config.Group{config.GroupComment},
-			giveInclude: []string{tools.NameGetChange},
+			giveInclude: []string{tools.NameSearchChanges},
 			giveExclude: nil,
 			want:        nil,
 		},
