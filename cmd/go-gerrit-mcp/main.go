@@ -54,7 +54,10 @@ func run(lgr *slog.Logger) error {
 		&mcp.ServerOptions{Instructions: instructions},
 	)
 
-	enabled := registry.Resolve(cfg.Groups)
+	enabled, err := registry.Resolve(cfg)
+	if err != nil {
+		return err
+	}
 
 	set := make(map[string]bool, len(enabled))
 	for _, name := range enabled {
