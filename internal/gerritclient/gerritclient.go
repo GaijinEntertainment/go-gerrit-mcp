@@ -7,8 +7,10 @@ package gerritclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -77,6 +79,34 @@ func (c *Client) Self() gerrit.AccountInfo {
 	return c.self
 }
 
+// Projects reports the project allowlist, empty when scoping is off.
+func (c *Client) Projects() []string {
+	return slices.Clone(c.projects)
+}
+
+// apiErr threads the HTTP status of a failed Gerrit call through the error
+// chain for programmatic branching; message rendering stays with the wrapped
+// error.
+type apiErr struct {
+	status int
+	err    error
+}
+
+func (a *apiErr) Error() string { return a.err.Error() }
+func (a *apiErr) Unwrap() error { return a.err }
+
+// APIStatus reports the HTTP status carried by an error chain, 0 when the
+// error did not originate from a Gerrit API response.
+func APIStatus(err error) int {
+	var a *apiErr
+
+	if errors.As(err, &a) {
+		return a.status
+	}
+
+	return 0
+}
+
 // apiError converts a go-gerrit response/error pair into an error carrying
 // Gerrit's own message. The library's error holds only the status line; the
 // response body — readable and unclosed on the error path — holds the reason
@@ -92,7 +122,7 @@ func apiError(resp *gerrit.Response, err error) error {
 
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	if readErr != nil {
-		return res
+		return &apiErr{status: resp.StatusCode, err: res}
 	}
 
 	msg := strings.TrimSpace(string(gerrit.RemoveMagicPrefixLine(body)))
@@ -100,5 +130,5 @@ func apiError(resp *gerrit.Response, err error) error {
 		res = res.WithField("gerrit_message", msg)
 	}
 
-	return res
+	return &apiErr{status: resp.StatusCode, err: res}
 }

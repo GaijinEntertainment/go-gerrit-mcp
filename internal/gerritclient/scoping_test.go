@@ -100,6 +100,8 @@ func Test_ProjectScoping(t *testing.T) {
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, gerritclient.ErrProjectScope)
+		assert.Contains(t, err.Error(), "change_project=secret",
+			"refusal must name where the change actually lives")
 	})
 
 	t.Run("scoped id refused without any request", func(t *testing.T) {

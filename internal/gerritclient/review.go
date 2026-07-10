@@ -41,7 +41,7 @@ func (c *Client) checkWriteScope(ctx context.Context, changeID string) error {
 	}
 
 	if !c.projectAllowed(info.Project) {
-		return c.scopeError(changeID)
+		return c.scopeError(changeID, info.Project)
 	}
 
 	if !c.allowForeign && info.Owner.AccountID != c.self.AccountID {
