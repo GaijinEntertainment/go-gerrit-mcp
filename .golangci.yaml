@@ -1,0 +1,278 @@
+version: "2"
+
+run:
+  modules-download-mode: readonly
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: all
+  disable:
+    - funcorder
+    - cyclop
+    - depguard
+    - errname
+    - godox
+    - goheader
+    - govet
+    - importas
+    - intrange
+    - ireturn
+    - misspell
+    - nlreturn
+    - nonamedreturns
+    - tagalign
+    - tagliatelle
+    - varnamelen
+    - whitespace
+    - zerologlint
+    - sloglint
+    - noinlineerr
+    - wsl # replaced by wsl_v5
+    - gomodguard # replaced by gomodguard_v2
+    - unqueryvet
+  settings:
+    lll:
+      line-length: 120
+      tab-width: 2
+    funlen:
+      lines: 0
+      ignore-comments: true
+      statements: 50
+    gocognit:
+      min-complexity: 20
+    gocyclo:
+      min-complexity: 10
+    errcheck:
+      exclude-functions:
+        - (*bytes.Buffer).Write
+        - (*bytes.Buffer).WriteByte
+        - (*bytes.Buffer).WriteRune
+        - (*bytes.Buffer).WriteString
+        - (*strings.Builder).Write
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteRune
+        - (*strings.Builder).WriteString
+        - (*os.File).Close
+    exhaustruct:
+      allow-empty-returns: true
+      exclude:
+        - net/http\.Transport
+        - net/http\.Server
+        - net/http\.Client
+        - net/url\.URL
+        - crypto/tls\.Config
+        - testing/fstest\.MapFile
+    forbidigo:
+      forbid:
+        - pattern: (?i)(^|\.)print(f|ln)?$
+    gomoddirectives:
+      replace-local: true
+    gomodguard_v2:
+      blocked:
+        - module: github.com/magiconair/properties
+          recommendations:
+            - github.com/stretchr/testify/assert
+            - github.com/stretchr/testify/require
+          reason: Please use the one testing framework for the whole repository.
+    gosec:
+      config:
+        G306: "0666"
+    mnd:
+      ignored-functions:
+        - os\.(OpenFile|WriteFile|Chmod),p?flag\..*
+        - strconv\.(Format|Parse|Append).*
+    revive:
+      confidence: 0.8
+      enable-all-rules: true
+      rules:
+        # ========== ACTIVE REVIVE RULES ==========
+        - name: argument-limit
+          arguments:
+            - 6
+          severity: warning
+          disabled: false
+        - name: atomic
+          disabled: false
+        - name: bool-literal-in-expr
+          disabled: false
+        - name: call-to-gc
+          disabled: false
+        - name: confusing-naming
+          disabled: false
+        - name: confusing-results
+          disabled: false
+        - name: constant-logical-expr
+          disabled: false
+        - name: context-keys-type
+          disabled: false
+        - name: deep-exit
+          disabled: false
+        - name: defer
+          disabled: false
+        - name: early-return
+          disabled: false
+        - name: empty-block
+          disabled: false
+        - name: error-naming
+          disabled: false
+        - name: error-return
+          disabled: false
+        - name: error-strings
+          disabled: false
+        - name: errorf
+          disabled: false
+        - name: function-result-limit
+          arguments:
+            - 3
+          severity: warning
+          disabled: false
+        - name: get-return
+          disabled: false
+        - name: identical-branches
+          disabled: false
+        - name: if-return
+          disabled: false
+        - name: increment-decrement
+          disabled: false
+        - name: indent-error-flow
+          disabled: false
+        - name: modifies-parameter
+          disabled: false
+        - name: modifies-value-receiver
+          disabled: false
+        - name: nested-structs
+          disabled: false
+        - name: optimize-operands-order
+          disabled: false
+        - name: range
+          disabled: false
+        - name: range-val-address
+          disabled: false
+        - name: receiver-naming
+          disabled: false
+        - name: string-of-int
+          disabled: false
+        - name: superfluous-else
+          disabled: false
+        - name: time-equal
+          disabled: false
+        - name: time-naming
+          disabled: false
+        - name: unexported-naming
+          disabled: false
+        - name: unexported-return
+          disabled: false
+        - name: unnecessary-stmt
+          disabled: false
+        - name: unreachable-code
+          disabled: false
+        - name: unused-receiver
+          disabled: false
+        - name: use-any
+          disabled: false
+        - name: useless-break
+          disabled: false
+        - name: var-declaration
+          disabled: false
+        - name: var-naming
+          disabled: false
+        - name: waitgroup-by-value
+          disabled: false
+
+        # ========== DISABLED - REPLACED BY STANDALONE LINTERS ==========
+        - name: add-constant # can be replaced by goconst
+          disabled: true
+        - name: banned-characters # can be replaced by asciicheck
+          disabled: true
+        - name: cognitive-complexity # replaced by gocognit
+          disabled: true
+        - name: comment-spacings # can be replaced by whitespace
+          disabled: true
+        - name: context-as-argument # replaced by contextcheck
+          disabled: true
+        - name: cyclomatic # replaced by gocyclo
+          disabled: true
+        - name: empty-lines # replaced by wsl
+          disabled: true
+        - name: file-header # can be replaced by goheader
+          disabled: true
+        - name: function-length # replaced by funlen
+          disabled: true
+        - name: import-shadowing # replaced by gocritic
+          disabled: true
+        - name: line-length-limit # replaced by lll
+          disabled: true
+        - name: range-val-in-closure # can be replaced by copyloopvar
+          disabled: true
+        - name: redefines-builtin-id # replaced by predeclared
+          disabled: true
+        - name: string-format # replaced by staticcheck
+          disabled: true
+        - name: struct-tag # can be replaced by tagliatelle
+          disabled: true
+        - name: unhandled-error # replaced by errcheck
+          disabled: true
+        - name: unused-parameter # replaced by unparam
+          disabled: true
+
+        # ========== DISABLED - PROJECT SPECIFIC REASONS ==========
+        - name: exported # overall annoying linter, maybe configure and re-enable later
+          disabled: true
+        - name: flag-parameter
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: package-comments # interferes with file-level nolint rules
+          disabled: true
+        - name: unchecked-type-assertion
+          disabled: true
+        - name: blank-imports
+          disabled: true
+        - name: imports-blocklist
+          disabled: true
+        - name: dot-imports
+          disabled: true
+        - name: duplicated-imports
+          disabled: true
+    testifylint:
+      disable:
+        - require-error
+    wsl_v5:
+      default: all
+      branch-max-lines: 4
+      case-max-lines: 2
+      allow-whole-block: true
+      allow-first-in-block: true
+
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - funlen
+          - goconst
+    paths:
+      - .*\.gen\.go$ # ignore generated files
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+
+  exclusions:
+    paths:
+      - .*\.gen\.go$ # ignore generated files
+
+  settings:
+    gci:
+      sections:
+        - blank
+        - dot
+        - standard
+        - default
+        - localmodule
+      custom-order: true
+    gofmt:
+      simplify: true
