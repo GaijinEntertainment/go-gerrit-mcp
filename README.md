@@ -114,6 +114,51 @@ claude mcp add gerrit \
 }
 ```
 
+## Per-project configuration in Claude Code
+
+Everything the server needs is read from the environment — the identity variables above plus a `GERRIT_MCP_*`
+mirror for every flag (see [Configuration reference](#configuration-reference)) — and MCP server processes inherit
+the session environment. In Claude Code that turns one user-level registration into per-project configuration,
+down to different Gerrit instances with different credentials per repository.
+
+**`~/.claude.json`** — the registration; no `env` block:
+
+```json
+{
+  "mcpServers": {
+    "gerrit": {
+      "command": "go-gerrit-mcp"
+    }
+  }
+}
+```
+
+**`<project>/.claude/settings.local.json`** — the project's environment; every `env` entry reaches the server
+process:
+
+```json
+{
+  "env": {
+    "GERRIT_URL": "https://gerrit.example.com",
+    "GERRIT_USERNAME": "your-username",
+    "GERRIT_TOKEN": "your-http-credential",
+    "GERRIT_MCP_GROUPS": "read,comment",
+    "GERRIT_MCP_PROJECTS": "core,infra"
+  }
+}
+```
+
+Values shared by most projects can sit one layer down in `~/.claude/settings.json` — settings files merge with
+`.claude/settings.local.json` over `.claude/settings.json` over `~/.claude/settings.json` — so a project declares
+only its deltas. Anything no layer sets falls back to the server's own defaults: read-only, own changes.
+
+The registration's `env` block stays empty for a reason: a variable named there shadows every settings layer, and
+references are not a way around that — they never resolve from settings files. `${VAR}` expands only from the
+shell environment that launched `claude`, and anything unresolved reaches the server as a literal string.
+
+Other MCP clients inherit their launch environment the same way, so per-directory tooling such as
+[direnv](https://direnv.net/) achieves the identical split without client support.
+
 ## Capability groups
 
 Capability is selected at startup via `--groups` as a comma-separated list. Groups are independent and combinable —
