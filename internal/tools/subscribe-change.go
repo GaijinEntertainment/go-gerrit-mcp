@@ -34,10 +34,16 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameSubscribeChange,
-				Description: "Subscribe this session to a Gerrit change: from now on its review " +
-					"activity is pushed into the session as it happens — no polling needed. The " +
-					"subscription is per-session and in-memory; it ends with the session, and " +
-					"after a server restart you must subscribe again.",
+				Description: "Subscribe this session to a Gerrit change. Call it right after pushing " +
+					"a change for review, or when a review outcome you depend on is pending — an " +
+					"approval, a CI verdict, a reviewer's reply. New activity then arrives in the " +
+					"session by itself: change messages, votes, inline comment threads, and status " +
+					"transitions, carried whole — never poll the read tools for a subscribed " +
+					"change. When the change is merged or abandoned, a final notification announces " +
+					"it and the subscription ends automatically; subscribing to a change already in " +
+					"such a state is refused. The subscription is per-session and in-memory: it " +
+					"leaves no trace on Gerrit, ends with the session, and after a server restart " +
+					"you must subscribe again.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in subscribeChangeInput,
 			) (*mcp.CallToolResult, any, error) {
 				info, err := c.GetChange(ctx, in.Change)
