@@ -145,7 +145,8 @@ func Test_Assemble_Enabled(t *testing.T) {
 	assert.NotNil(t, caps.Logging, "logging capability must survive the override")
 	assert.NotNil(t, caps.Tools, "tools capability must survive the override")
 
-	assert.ElementsMatch(t, append(readGroupTools(), "subscribe_change"), toolNames(t, session))
+	assert.ElementsMatch(t,
+		append(readGroupTools(), "subscribe_change", "unsubscribe_change"), toolNames(t, session))
 }
 
 // Test_Assemble_TracerBullet drives the whole enabled stack in-process:
@@ -234,7 +235,8 @@ func Test_Assemble_TracerBullet(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(req.Params, &params))
 		assert.Contains(t, params.Content, `<review_activity change="123"`)
-		assert.Equal(t, map[string]string{"change": "123"}, params.Meta)
+		assert.Contains(t, params.Content, "ping", "the payload carries the activity itself")
+		assert.Equal(t, map[string]string{"change": "123", "project": "core", "kind": "message"}, params.Meta)
 
 	case <-time.After(receiveTimeout):
 		t.Fatal("no channel notification before timeout")

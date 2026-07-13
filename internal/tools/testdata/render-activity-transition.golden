@@ -1,0 +1,3 @@
+<review_activity change="123" project="core" status="ABANDONED" updated="2026-07-02T11:30:00Z">
+<transition from="NEW" to="ABANDONED"/>
+</review_activity>

@@ -126,10 +126,13 @@ func assemble(
 		emitter := &channelEmitter{transport: capture, lgr: lgr}
 
 		tools.SubscribeChange(client, store).Register(srv)
+		tools.UnsubscribeChange(client, store).Register(srv)
 
 		s.transport = capture
-		s.tools = append(s.tools, tools.NameSubscribeChange)
-		s.poller = notifications.NewPoller(store, client, emitter, cfg.ReviewNotificationsPollInterval, lgr)
+		s.tools = append(s.tools, tools.NameSubscribeChange, tools.NameUnsubscribeChange)
+		s.poller = notifications.NewPoller(
+			store, client, tools.NewDeltaRenderer(), emitter, cfg.ReviewNotificationsPollInterval, lgr,
+		)
 	}
 
 	return s, nil

@@ -28,7 +28,7 @@ const subscribeChangeJSON = ")]}'\n" + `{
   "owner": {"_account_id": 7, "name": "Alice", "username": "alice"}
 }`
 
-// subscribeSession mirrors session() with the subscription tool registered
+// subscribeSession mirrors session() with both subscription tools registered
 // over the given store instead of the group-gated set.
 func subscribeSession(
 	t *testing.T, gerritHandler http.HandlerFunc, store *notifications.Store, mutate ...func(*config.Config),
@@ -64,6 +64,7 @@ func subscribeSession(
 	mcpServer.AddReceivingMiddleware(tools.WrapErrors)
 
 	tools.SubscribeChange(client, store).Register(mcpServer)
+	tools.UnsubscribeChange(client, store).Register(mcpServer)
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 

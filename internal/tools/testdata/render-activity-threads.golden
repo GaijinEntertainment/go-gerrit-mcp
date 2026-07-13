@@ -1,0 +1,12 @@
+<review_activity change="123" project="core" status="NEW" updated="2026-07-02T11:30:00Z">
+<file path="main.go">
+<thread resolved="false">
+<comment id="c1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="3">
+nil deref here
+</comment>
+<comment id="c2" author="Alice (alice)" date="2026-07-02T11:30:00Z" patch_set="1" line="3" in_reply_to="c1">
+fixed in ps2
+</comment>
+</thread>
+</file>
+</review_activity>

@@ -7,10 +7,7 @@ import (
 	"strings"
 	"time"
 
-	gerrit "github.com/andygrunwald/go-gerrit"
-
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/llmxml"
 )
 
 // Emitter delivers one rendered notification into the agent's session.
@@ -21,6 +18,13 @@ type Emitter interface {
 	Emit(ctx context.Context, content string, meta map[string]string) error
 }
 
+// Renderer composes a delta into the channel payload: llmxml content plus
+// the routing meta. It lives behind an interface because the payload reuses
+// the rendering vocabulary of the tools package, which sits above this one.
+type Renderer interface {
+	Render(d *Delta) (content string, meta map[string]string)
+}
+
 // Poller periodically queries Gerrit for movement on subscribed changes and
 // hands detected activity to the emitter. Failures are logged and retried on
 // the next tick — a background loop has no caller to return errors to, and a
@@ -28,6 +32,7 @@ type Emitter interface {
 type Poller struct {
 	store    *Store
 	client   *gerritclient.Client
+	renderer Renderer
 	emitter  Emitter
 	interval time.Duration
 	lgr      *slog.Logger
@@ -36,11 +41,13 @@ type Poller struct {
 // NewPoller assembles a poller over the given subscription store. It does not
 // start anything; the caller runs [Poller.Run] on its own goroutine.
 func NewPoller(
-	store *Store, client *gerritclient.Client, emitter Emitter, interval time.Duration, lgr *slog.Logger,
+	store *Store, client *gerritclient.Client, renderer Renderer, emitter Emitter,
+	interval time.Duration, lgr *slog.Logger,
 ) *Poller {
 	return &Poller{
 		store:    store,
 		client:   client,
+		renderer: renderer,
 		emitter:  emitter,
 		interval: interval,
 		lgr:      lgr,
@@ -127,9 +134,9 @@ func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
 }
 
 func (p *Poller) emit(ctx context.Context, d *Delta) {
-	meta := map[string]string{"change": strconv.Itoa(d.Change.Number)}
+	content, meta := p.renderer.Render(d)
 
-	if err := p.emitter.Emit(ctx, renderActivity(d.Change), meta); err != nil {
+	if err := p.emitter.Emit(ctx, content, meta); err != nil {
 		p.lgr.Error("review notification emit", "change", d.Change.Number, "error", err)
 	}
 }
@@ -143,16 +150,4 @@ func batchQuery(changes []int) string {
 	}
 
 	return strings.Join(clauses, " OR ")
-}
-
-// renderActivity renders the tracer-bullet payload: the fact of movement on a
-// subscribed change. Activity details (messages, votes, comment threads)
-// arrive with the deltas phase.
-func renderActivity(ci *gerrit.ChangeInfo) string {
-	return llmxml.NewElement("review_activity",
-		llmxml.Attr("change", ci.Number),
-		llmxml.Attr("project", ci.Project),
-		llmxml.Attr("status", ci.Status),
-		llmxml.Attr("updated", ci.Updated.UTC().Format(time.RFC3339)),
-	).String()
 }

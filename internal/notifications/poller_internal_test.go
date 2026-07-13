@@ -3,9 +3,11 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -67,6 +69,16 @@ func (f *fakeEmitter) recorded() []emitCall {
 	defer f.mu.Unlock()
 
 	return append([]emitCall(nil), f.calls...)
+}
+
+// fakeRenderer summarises the delta so tick tests can assert what reached
+// the emitter without depending on the production payload vocabulary.
+type fakeRenderer struct{}
+
+func (fakeRenderer) Render(d *Delta) (string, map[string]string) {
+	return fmt.Sprintf("delta change=%d messages=%d votes=%d comments=%d transition=%v",
+			d.Change.Number, len(d.Messages), len(d.Votes), len(d.NewComments), d.Transition != nil),
+		map[string]string{"change": strconv.Itoa(d.Change.Number)}
 }
 
 // gerritStub serves the four endpoints the poller path touches, counting
@@ -177,7 +189,7 @@ func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
 	lgr := slog.New(slog.NewTextHandler(logs, nil))
 
 	return &pollerFixture{
-		poller:  NewPoller(NewStore(), client, emitter, interval, lgr),
+		poller:  NewPoller(NewStore(), client, fakeRenderer{}, emitter, interval, lgr),
 		stub:    stub,
 		emitter: emitter,
 		logs:    logs,
@@ -211,9 +223,7 @@ func Test_Poller_Tick(t *testing.T) {
 
 		calls := f.emitter.recorded()
 		require.Len(t, calls, 1, "second tick over the same state must be silent")
-		assert.Equal(t,
-			`<review_activity change="123" project="core" status="NEW" updated="2026-07-01T11:00:00Z"/>`,
-			calls[0].content)
+		assert.Equal(t, "delta change=123 messages=1 votes=0 comments=0 transition=false", calls[0].content)
 		assert.Equal(t, map[string]string{"change": "123"}, calls[0].meta)
 
 		assert.EqualValues(t, 1, f.stub.details.Load(), "replay must not re-fetch an unmoved change")
