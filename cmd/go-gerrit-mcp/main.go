@@ -35,9 +35,15 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 
 // notificationsInstructions is appended to the instructions only when review
 // notifications are enabled; the zero-config instructions stay byte-identical.
-const notificationsInstructions = " Review notifications are enabled: after pushing or picking up a change " +
-	"whose review you must follow, call subscribe_change once — its review activity then arrives in this " +
-	"session automatically, no polling needed."
+const notificationsInstructions = " Review notifications are enabled in this session. Right after pushing " +
+	"a change for review, or whenever a review outcome you depend on is pending — an approval, a CI " +
+	"verdict, a reviewer's reply — call subscribe_change once; new activity on that change then arrives " +
+	"here on its own as review_activity blocks carrying the change messages, votes, inline comment " +
+	"threads, and status transitions themselves, so never poll the read tools for a subscribed change. " +
+	"When a subscribed change is merged or abandoned, a final notification announces it and the " +
+	"subscription ends by itself; unsubscribe_change ends one earlier. Subscriptions are per-session and " +
+	"in-memory — nothing is visible on Gerrit, and after a restart of this server you must subscribe " +
+	"again."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"

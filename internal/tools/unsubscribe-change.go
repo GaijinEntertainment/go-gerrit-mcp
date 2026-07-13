@@ -27,8 +27,10 @@ func UnsubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool 
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameUnsubscribeChange,
 				Description: "End this session's review-notifications subscription to a Gerrit " +
-					"change: no further activity on it will be pushed into the session. " +
-					"Unsubscribing a change that was not subscribed changes nothing and says so.",
+					"change: use it when the change no longer needs following — its activity " +
+					"stops arriving immediately. Unsubscribing a change that was not subscribed " +
+					"changes nothing and says so. Merged and abandoned changes end their own " +
+					"subscriptions; those need no unsubscribe.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in unsubscribeChangeInput,
 			) (*mcp.CallToolResult, any, error) {
 				number, err := resolveChangeNumber(ctx, c, in.Change)
