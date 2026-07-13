@@ -78,3 +78,31 @@ there is no schema and no consumer that parses it back.
 **Avoid:** XML (implies spec compliance and `encoding/xml` serialization — explicitly rejected; no declaration, no
 namespaces, no round-tripping); JSON output / structured output (MCP-ecosystem default assumption; this server
 deliberately emits text for model consumption, not machine-parseable payloads).
+
+### Review notifications
+
+The feature (dedicated flag family, disabled by default) that polls Gerrit for activity on subscribed changes and
+pushes filtered events into the agent's session. Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it is
+deliberately not a capability group, because it is client-side mechanics, not a Gerrit operation class.
+**Avoid:** notification group / notification capability (implies a fourth capability group — groups partition Gerrit
+operations by trail impact, this partitions nothing); watch feature / watcher (collides with Gerrit's server-side
+watched-projects setting, which this is not).
+
+### Subscription
+
+The per-session, in-memory set of changes the agent asked to be notified about, plus the per-change cursor tracking
+what was already reported. Trail-free — nothing is visible on the Gerrit instance — and bound to the server process
+lifetime: a restarted session starts empty and re-subscribes. Terminal states (merged, abandoned) end a subscription
+automatically.
+**Avoid:** watch / watch set (Gerrit's "watched projects" is a server-side account setting that emails you — this is
+local state the server holds for one session); star (Gerrit's starred-changes mechanism, also server-side account
+state).
+
+### Channel
+
+The Claude Code channels contract this server implements when review notifications are enabled: the
+`claude/channel` experimental capability declared at initialize, plus `notifications/claude/channel` events whose
+payload the client injects into the model's session as a `<channel>` block.
+**Avoid:** notification channel in the MCP-logging sense (`notifications/message` is a different mechanism that does
+not reach the model); chat channel (channels here carry review activity into the session, not conversation out of
+it).
