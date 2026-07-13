@@ -1,0 +1,19 @@
+<comments change="123" filter="all" threads="2" drafts="0">
+<resolved count="2">
+<file path="core/scanner.go">
+<thread resolved="true">
+<comment id="b-root" author="Bob (bob)" date="2026-07-01T11:00:00Z" patch_set="1" line="2">
+Second opened
+</comment>
+</thread>
+<thread resolved="true">
+<comment id="a-root" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="1">
+First opened
+</comment>
+<comment id="a-reply" author="Alice (alice)" date="2026-07-01T15:00:00Z" patch_set="1" line="1" in_reply_to="a-root">
+Late reply
+</comment>
+</thread>
+</file>
+</resolved>
+</comments>

@@ -278,6 +278,34 @@ func Test_GetChangeComments(t *testing.T) {
 		golden(t, "change-comments-ui-fork", out)
 	})
 
+	t.Run("threads follow their latest comment, not their root", func(t *testing.T) {
+		t.Parallel()
+
+		// Thread A starts first but its reply is the newest activity; thread
+		// B started later and never moved. B's conversation last moved
+		// earlier, so B renders first.
+		const published = ")]}'\n" + `{
+		  "core/scanner.go": [
+		    {"id": "a-root", "line": 1, "patch_set": 1, "message": "First opened", "unresolved": false,
+		     "updated": "2026-07-01 10:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}},
+		    {"id": "a-reply", "in_reply_to": "a-root", "line": 1, "patch_set": 1, "message": "Late reply",
+		     "unresolved": false,
+		     "updated": "2026-07-01 15:00:00.000000000",
+		     "author": {"_account_id": 7, "name": "Alice", "username": "alice"}},
+		    {"id": "b-root", "line": 2, "patch_set": 1, "message": "Second opened", "unresolved": false,
+		     "updated": "2026-07-01 11:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}}
+		  ]
+		}`
+
+		cs := commentsSession(t, published, emptyDraftsJSON)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+
+		golden(t, "change-comments-latest-order", out)
+	})
+
 	t.Run("same-timestamp fork orders by comment id", func(t *testing.T) {
 		t.Parallel()
 

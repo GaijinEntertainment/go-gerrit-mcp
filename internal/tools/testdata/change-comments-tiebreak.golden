@@ -1,4 +1,5 @@
 <comments change="123" filter="all" threads="1" drafts="0">
+<unresolved count="1">
 <file path="core/scanner.go">
 <thread resolved="false">
 <comment id="c1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="10">
@@ -12,4 +13,5 @@ Not fixed
 </comment>
 </thread>
 </file>
+</unresolved>
 </comments>
