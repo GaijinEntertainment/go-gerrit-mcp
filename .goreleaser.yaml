@@ -32,6 +32,9 @@ dockers_v2:
       org.opencontainers.image.title: "{{ .ProjectName }}"
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.source: "{{ .GitURL }}"
+      # The MCP registry verifies OCI package ownership by matching this
+      # label against the server.json name; without it the publish fails.
+      io.modelcontextprotocol.server.name: "team.gaijin/go-gerrit-mcp"
 
 checksum:
   name_template: checksums.txt

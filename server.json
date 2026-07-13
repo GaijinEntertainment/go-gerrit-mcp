@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "team.gaijin/go-gerrit-mcp",
+  "title": "Gerrit Code Review",
+  "description": "Capability-gated MCP tools for Gerrit code review: search, read diffs, comment, vote, transition",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/GaijinEntertainment/go-gerrit-mcp",
+    "source": "github",
+    "id": "1285115759"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/gaijinentertainment/go-gerrit-mcp:0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GERRIT_URL",
+          "description": "Base URL of the Gerrit instance",
+          "isRequired": true
+        },
+        {
+          "name": "GERRIT_USERNAME",
+          "description": "Account username for HTTP authentication",
+          "isRequired": true
+        },
+        {
+          "name": "GERRIT_TOKEN",
+          "description": "HTTP password or token of the account",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "GERRIT_MCP_GROUPS",
+          "description": "Comma-separated capability groups to enable: read, comment, transition",
+          "default": "read"
+        },
+        {
+          "name": "GERRIT_MCP_PROJECTS",
+          "description": "Comma-separated Gerrit project allowlist confining every operation"
+        },
+        {
+          "name": "GERRIT_MCP_OWN_CHANGES_ONLY",
+          "description": "Refuse trail-leaving operations on changes not owned by the authenticated account",
+          "format": "boolean",
+          "default": "true"
+        }
+      ]
+    }
+  ]
+}
