@@ -1,0 +1,15 @@
+<comments change="123" filter="unresolved" threads="1" drafts="1">
+<file path="core/scanner.go">
+<thread resolved="false">
+<comment id="c1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="10">
+Is this nil-safe?
+</comment>
+<comment id="c2" author="Alice (alice)" date="2026-07-01T11:00:00Z" patch_set="1" line="10" in_reply_to="c1">
+Fixed in ps2
+</comment>
+<comment id="d1" author="Review Bot (bot)" draft="true" date="2026-07-01T12:00:00Z" patch_set="1" line="10" in_reply_to="c1">
+Still crashes on empty input
+</comment>
+</thread>
+</file>
+</comments>

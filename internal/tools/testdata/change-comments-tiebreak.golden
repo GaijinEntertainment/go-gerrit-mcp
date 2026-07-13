@@ -1,0 +1,15 @@
+<comments change="123" filter="all" threads="1" drafts="0">
+<file path="core/scanner.go">
+<thread resolved="false">
+<comment id="c1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="10">
+Race here
+</comment>
+<comment id="aa" author="Alice (alice)" date="2026-07-01T11:00:00Z" patch_set="1" line="10" in_reply_to="c1">
+Fixed
+</comment>
+<comment id="zz" author="Bob (bob)" date="2026-07-01T11:00:00Z" patch_set="1" line="10" in_reply_to="c1">
+Not fixed
+</comment>
+</thread>
+</file>
+</comments>

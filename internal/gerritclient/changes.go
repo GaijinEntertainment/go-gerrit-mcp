@@ -19,6 +19,7 @@ var (
 	ErrListFiles    = e.New("list change files")
 	ErrGetDiff      = e.New("get file diff")
 	ErrListComments = e.New("list change comments")
+	ErrListDrafts   = e.New("list draft comments")
 
 	// ErrProjectScope reports an operation refused by the project allowlist.
 	ErrProjectScope = e.New("change is outside the configured project scope")
@@ -287,4 +288,24 @@ func (c *Client) ListChangeComments(ctx context.Context, changeID string) (map[s
 	}
 
 	return *comments, nil
+}
+
+// ListChangeDrafts lists the calling account's unpublished draft comments
+// across all revisions of a change, grouped by file path. Gerrit never
+// exposes other accounts' drafts.
+func (c *Client) ListChangeDrafts(ctx context.Context, changeID string) (map[string][]gerrit.CommentInfo, error) {
+	if err := c.checkProjectScope(ctx, changeID); err != nil {
+		return nil, ErrListDrafts.Wrap(err)
+	}
+
+	drafts, resp, err := c.gerrit.Changes.ListChangeDrafts(ctx, changeID)
+	if err != nil {
+		return nil, ErrListDrafts.Wrap(apiError(resp, err), fields.F("change", changeID))
+	}
+
+	if drafts == nil {
+		return nil, ErrListDrafts.Wrap(errEmptyResponse, fields.F("change", changeID))
+	}
+
+	return *drafts, nil
 }
