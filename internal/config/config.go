@@ -12,6 +12,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"dev.gaijin.team/go/golib/e"
 	"dev.gaijin.team/go/golib/fields"
@@ -31,6 +32,8 @@ const (
 
 const defaultGroups = "read"
 
+const defaultPollInterval = "60s"
+
 // Env variable names for connection identity and credentials.
 const (
 	EnvURL      = "GERRIT_URL"
@@ -39,11 +42,13 @@ const (
 )
 
 var (
-	errEnvMissing    = e.New("required environment variable is not set")
-	errUnknownGroups = e.New("unknown capability groups")
-	errNoGroups      = e.New("no capability groups enabled")
-	errParseFlags    = e.New("parse flags")
-	errInvalidBool   = e.New("invalid boolean flag value")
+	errEnvMissing          = e.New("required environment variable is not set")
+	errUnknownGroups       = e.New("unknown capability groups")
+	errNoGroups            = e.New("no capability groups enabled")
+	errParseFlags          = e.New("parse flags")
+	errInvalidBool         = e.New("invalid boolean flag value")
+	errInvalidDuration     = e.New("invalid duration flag value")
+	errIntervalNotPositive = e.New("poll interval must be positive")
 )
 
 // Config is the resolved server configuration.
@@ -68,6 +73,14 @@ type Config struct {
 	// (the default), trail-leaving operations are refused on changes not
 	// owned by the authenticated account.
 	AllowForeignChanges bool
+	// ReviewNotifications enables the review-notifications feature: polling
+	// Gerrit for activity on subscribed changes and pushing it into the
+	// agent's session. Off by default.
+	ReviewNotifications bool
+	// ReviewNotificationsPollInterval is the cadence of the review
+	// notifications poller. Always resolved and validated, even when the
+	// feature is disabled.
+	ReviewNotificationsPollInterval time.Duration
 }
 
 // behaviorFlag is one CLI flag with its GERRIT_MCP_* env mirror. The flag
@@ -115,21 +128,37 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		usage:    "refuse trail-leaving operations on changes not owned by the authenticated account",
 		fallback: "true",
 	}
+	reviewNotifications := behaviorFlag{
+		name:     "review-notifications",
+		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS",
+		usage:    "poll Gerrit for activity on subscribed changes and push it into the agent's session",
+		fallback: "false",
+	}
+	pollInterval := behaviorFlag{
+		name:     "review-notifications-poll-interval",
+		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL",
+		usage:    "cadence of the review notifications poller, as a Go duration (e.g. 60s)",
+		fallback: defaultPollInterval,
+	}
 
-	err := resolveFlags(args, getenv, []*behaviorFlag{&groups, &includeTools, &excludeTools, &projects, &ownChanges})
+	err := resolveFlags(args, getenv, []*behaviorFlag{
+		&groups, &includeTools, &excludeTools, &projects, &ownChanges, &reviewNotifications, &pollInterval,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &Config{
-		GerritURL:           getenv(EnvURL),
-		Username:            getenv(EnvUsername),
-		Token:               getenv(EnvToken),
-		Groups:              nil,
-		IncludeTools:        splitList(includeTools.value),
-		ExcludeTools:        splitList(excludeTools.value),
-		Projects:            splitList(projects.value),
-		AllowForeignChanges: false,
+		GerritURL:                       getenv(EnvURL),
+		Username:                        getenv(EnvUsername),
+		Token:                           getenv(EnvToken),
+		Groups:                          nil,
+		IncludeTools:                    splitList(includeTools.value),
+		ExcludeTools:                    splitList(excludeTools.value),
+		Projects:                        splitList(projects.value),
+		AllowForeignChanges:             false,
+		ReviewNotifications:             false,
+		ReviewNotificationsPollInterval: 0,
 	}
 
 	errs := missingEnv(cfg)
@@ -139,6 +168,20 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		errs = append(errs, err)
 	} else {
 		cfg.AllowForeignChanges = !ownOnly
+	}
+
+	notifications, err := parseBool(reviewNotifications)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.ReviewNotifications = notifications
+	}
+
+	interval, err := parsePollInterval(pollInterval)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.ReviewNotificationsPollInterval = interval
 	}
 
 	parsed, err := parseGroups(groups.value)
@@ -215,6 +258,28 @@ func parseBool(bf behaviorFlag) (bool, error) {
 	}
 
 	return v, nil
+}
+
+// parsePollInterval parses a resolved duration flag value and rejects
+// non-positive intervals, naming the flag and the offending value in the
+// error.
+func parsePollInterval(bf behaviorFlag) (time.Duration, error) {
+	d, err := time.ParseDuration(strings.TrimSpace(bf.value))
+	if err != nil {
+		return 0, errInvalidDuration.WithFields(
+			fields.F("flag", bf.name),
+			fields.F("value", bf.value),
+		)
+	}
+
+	if d <= 0 {
+		return 0, errIntervalNotPositive.WithFields(
+			fields.F("flag", bf.name),
+			fields.F("value", bf.value),
+		)
+	}
+
+	return d, nil
 }
 
 // splitList splits a comma-separated list, trimming whitespace and dropping

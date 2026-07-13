@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -243,6 +244,133 @@ func Test_Load_OwnChanges(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "invalid boolean flag value")
 		assert.ErrorContains(t, err, "own-changes-only")
+		assert.ErrorContains(t, err, "GERRIT_TOKEN")
+	})
+}
+
+func Test_Load_ReviewNotifications(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero config leaves the feature disabled with the default interval", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load(nil, env(secrets()))
+		require.NoError(t, err)
+		assert.False(t, cfg.ReviewNotifications)
+		assert.Equal(t, 60*time.Second, cfg.ReviewNotificationsPollInterval)
+	})
+
+	t.Run("flag enables", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{"--review-notifications", "true"}, env(secrets()))
+		require.NoError(t, err)
+		assert.True(t, cfg.ReviewNotifications)
+	})
+
+	t.Run("env mirror enables", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS"] = "true"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.True(t, cfg.ReviewNotifications)
+	})
+
+	t.Run("enable flag wins over env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS"] = "true"
+
+		cfg, err := config.Load([]string{"--review-notifications=false"}, env(m))
+		require.NoError(t, err)
+		assert.False(t, cfg.ReviewNotifications)
+	})
+
+	t.Run("interval resolves from flag", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{"--review-notifications-poll-interval", "2m"}, env(secrets()))
+		require.NoError(t, err)
+		assert.Equal(t, 2*time.Minute, cfg.ReviewNotificationsPollInterval)
+	})
+
+	t.Run("interval resolves from env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL"] = "30s"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.Equal(t, 30*time.Second, cfg.ReviewNotificationsPollInterval)
+	})
+
+	t.Run("interval flag wins over env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL"] = "30s"
+
+		cfg, err := config.Load([]string{"--review-notifications-poll-interval", "90s"}, env(m))
+		require.NoError(t, err)
+		assert.Equal(t, 90*time.Second, cfg.ReviewNotificationsPollInterval)
+	})
+
+	t.Run("invalid enable value names the flag", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Load([]string{"--review-notifications", "nope"}, env(secrets()))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid boolean flag value")
+		assert.ErrorContains(t, err, "review-notifications")
+		assert.ErrorContains(t, err, "nope")
+	})
+
+	t.Run("unparsable interval names the flag and value", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Load([]string{"--review-notifications-poll-interval", "soon"}, env(secrets()))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid duration flag value")
+		assert.ErrorContains(t, err, "review-notifications-poll-interval")
+		assert.ErrorContains(t, err, "soon")
+	})
+
+	t.Run("zero interval rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Load([]string{"--review-notifications-poll-interval", "0s"}, env(secrets()))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "poll interval must be positive")
+		assert.ErrorContains(t, err, "0s")
+	})
+
+	t.Run("negative interval rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Load([]string{"--review-notifications-poll-interval", "-15s"}, env(secrets()))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "poll interval must be positive")
+		assert.ErrorContains(t, err, "-15s")
+	})
+
+	t.Run("interval error aggregates with other errors", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+		delete(m, "GERRIT_TOKEN")
+
+		_, err := config.Load([]string{"--review-notifications-poll-interval", "never"}, env(m))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid duration flag value")
 		assert.ErrorContains(t, err, "GERRIT_TOKEN")
 	})
 }
