@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -78,24 +79,31 @@ type changeComment struct {
 	path        string
 	authorLabel string
 	draft       bool
+	// sortRange is the range the change screen sorts by: the comment's own,
+	// or the parent's when sanitiseRanges inherits it. Rendering keeps the
+	// comment's real Range.
+	sortRange *gerrit.CommentRange `exhaustruct:"optional"`
 }
 
 // flattenComments merges the published and draft per-file comment maps into
-// one change-wide pool. Draft entries carry no author in Gerrit's response —
-// they are always the caller's — so they are labeled as self.
+// one change-wide pool, preserving the order the change screen sees: files
+// in sorted path order (Gerrit emits sorted keys), arrays as delivered,
+// drafts after published comments. Order matters — sanitiseRanges is
+// deliberately order-dependent. Draft entries carry no author in Gerrit's
+// response — they are always the caller's — so they are labeled as self.
 func flattenComments(published, drafts map[string][]gerrit.CommentInfo, selfLabel string) []changeComment {
 	var all []changeComment
 
-	for path, comments := range published {
-		for _, ci := range comments {
+	for _, path := range slices.Sorted(maps.Keys(published)) {
+		for _, ci := range published[path] {
 			all = append(all, changeComment{
 				CommentInfo: ci, path: path, authorLabel: accountLabel(ci.Author), draft: false,
 			})
 		}
 	}
 
-	for path, comments := range drafts {
-		for _, ci := range comments {
+	for _, path := range slices.Sorted(maps.Keys(drafts)) {
+		for _, ci := range drafts[path] {
 			all = append(all, changeComment{
 				CommentInfo: ci, path: path, authorLabel: selfLabel, draft: true,
 			})
@@ -126,42 +134,49 @@ type thread struct {
 	unresolved bool
 }
 
-// buildThreads reconstructs threads the way Gerrit 3.13 does
-// (CommentThreads): one change-wide pool keyed by comment id — reply chains
-// may cross file paths when a file was renamed between patch sets — where a
-// comment whose parent is absent from the pool roots its own thread.
+// pathPatchsetLevel is Gerrit's virtual path for patchset-level comments;
+// the change screen pins it before every real file.
+const pathPatchsetLevel = "/PATCHSET_LEVEL"
+
+// buildThreads groups comments the way the change screen does — a
+// bug-compatible replica of polygerrit's createCommentThreads (stable-3.13
+// comment-util.ts), because the product contract is "any thread the UI shows
+// as unresolved is unresolved" (issue #44). Comments are sorted (after the
+// order-dependent range patching of sanitiseRanges) and attached to the
+// thread of their parent only if that parent sorted earlier; otherwise the
+// comment roots a new thread — including replies whose parent merely sorts
+// later, which is exactly how the UI shatters such threads. Gerrit's
+// server-side CommentThreads would merge them; the screen does not, and the
+// screen is the contract.
 func buildThreads(all []changeComment) []thread {
-	byID := make(map[string]changeComment, len(all))
-	for _, c := range all {
-		byID[c.ID] = c
-	}
+	sanitiseRanges(all)
+
+	sorted := make([]changeComment, len(all))
+	copy(sorted, all)
+	slices.SortStableFunc(sorted, compareUI)
 
 	var (
-		roots    []changeComment
-		children = map[string][]changeComment{}
+		acc       [][]changeComment
+		threadIdx = map[string]int{}
 	)
 
-	for _, c := range all {
+	for _, c := range sorted {
 		if c.InReplyTo != "" {
-			if _, ok := byID[c.InReplyTo]; ok {
-				children[c.InReplyTo] = append(children[c.InReplyTo], c)
+			if ti, ok := threadIdx[c.InReplyTo]; ok {
+				acc[ti] = append(acc[ti], c)
+				threadIdx[c.ID] = ti
+
 				continue
 			}
 		}
 
-		roots = append(roots, c)
+		threadIdx[c.ID] = len(acc)
+		acc = append(acc, []changeComment{c})
 	}
 
-	slices.SortStableFunc(roots, compareComments)
+	threads := make([]thread, 0, len(acc))
 
-	threads := make([]thread, 0, len(roots))
-	seen := 0
-
-	for _, root := range roots {
-		members := expandThread(root, children)
-
-		seen += len(members)
-
+	for _, members := range acc {
 		last := members[len(members)-1]
 
 		threads = append(threads, thread{
@@ -170,81 +185,161 @@ func buildThreads(all []changeComment) []thread {
 		})
 	}
 
-	// A reference cycle in malformed data leaves comments unreachable from
-	// any root; surface them as single-comment threads instead of dropping
-	// them silently.
-	if seen < len(all) {
-		threads = append(threads, orphanThreads(all, threads)...)
-	}
-
 	return threads
 }
 
-// expandThread walks the reply tree from the root, always emitting the
-// earliest unvisited comment next, so parallel reply branches merge
-// chronologically while every parent stays ahead of its children.
-func expandThread(root changeComment, children map[string][]changeComment) []changeComment {
-	var members []changeComment
+// sanitiseRanges mirrors polygerrit's pre-sort pass: a rangeless reply
+// inherits its parent's range so same-location comments sort together. The
+// pass is deliberately order-dependent — a reply processed before its parent
+// inherits nothing — because the change screen's threading depends on
+// exactly that behavior.
+func sanitiseRanges(all []changeComment) {
+	byID := make(map[string]int, len(all))
 
-	frontier := []changeComment{root}
-
-	for len(frontier) > 0 {
-		next := 0
-
-		for i := 1; i < len(frontier); i++ {
-			if compareComments(frontier[i], frontier[next]) < 0 {
-				next = i
-			}
-		}
-
-		c := frontier[next]
-
-		frontier = append(frontier[:next], frontier[next+1:]...)
-		members = append(members, c)
-		frontier = append(frontier, children[c.ID]...)
+	for i := range all {
+		byID[all[i].ID] = i
+		all[i].sortRange = all[i].Range
 	}
 
-	return members
+	for i := range all {
+		if all[i].InReplyTo == "" || all[i].sortRange != nil {
+			continue
+		}
+
+		if j, ok := byID[all[i].InReplyTo]; ok && all[j].sortRange != nil {
+			all[i].sortRange = all[j].sortRange
+		}
+	}
 }
 
-// orphanThreads returns single-comment threads for comments that no built
-// thread contains.
-func orphanThreads(all []changeComment, threads []thread) []thread {
-	reached := map[string]bool{}
-
-	for _, t := range threads {
-		for _, c := range t.comments {
-			reached[c.ID] = true
-		}
+// compareUI replicates polygerrit's comment ordering: patchset-level path
+// first, then path, patch set, line (a range counts by its end line), range
+// coordinates — absent numbers sort before present ones throughout — then
+// drafts after published, timestamp, and comment id.
+func compareUI(a, b changeComment) int {
+	if c := comparePaths(a.path, b.path); c != 0 {
+		return c
 	}
 
-	var orphans []thread
-
-	for _, c := range all {
-		if !reached[c.ID] {
-			orphans = append(orphans, thread{
-				comments:   []changeComment{c},
-				unresolved: c.Unresolved != nil && *c.Unresolved,
-			})
-		}
+	if c := compareOptInt(a.PatchSet, a.PatchSet > 0, b.PatchSet, b.PatchSet > 0); c != 0 {
+		return c
 	}
 
-	return orphans
-}
+	l1, h1 := lineOf(a)
+	l2, h2 := lineOf(b)
 
-// compareComments orders comments chronologically, breaking ties (and absent
-// timestamps) by comment id — Gerrit's ordering, deterministic across runs.
-func compareComments(a, b changeComment) int {
-	switch {
-	case a.Updated == nil || b.Updated == nil:
-	case a.Updated.Before(b.Updated.Time):
+	if c := compareOptInt(l1, h1, l2, h2); c != 0 {
+		return c
+	}
+
+	if c := compareRanges(a.sortRange, b.sortRange); c != 0 {
+		return c
+	}
+
+	if a.draft != b.draft {
+		if a.draft {
+			return 1
+		}
+
 		return -1
-	case b.Updated.Before(a.Updated.Time):
-		return 1
-	default:
+	}
+
+	if c := compareUpdated(a.Updated, b.Updated); c != 0 {
+		return c
 	}
 
 	return strings.Compare(a.ID, b.ID)
+}
+
+// comparePaths orders file paths with the patchset-level pseudo-file pinned
+// first, as the change screen does.
+func comparePaths(a, b string) int {
+	switch {
+	case a == b:
+		return 0
+	case a == pathPatchsetLevel:
+		return -1
+	case b == pathPatchsetLevel:
+		return 1
+	default:
+		return strings.Compare(a, b)
+	}
+}
+
+// compareUpdated orders timestamps, treating an absent one as equal.
+func compareUpdated(a, b *gerrit.Timestamp) int {
+	switch {
+	case a == nil || b == nil:
+		return 0
+	case a.Before(b.Time):
+		return -1
+	case b.Before(a.Time):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// compareOptInt orders two optional numbers with absent values first —
+// polygerrit's compareNumber, where absent is JavaScript's undefined.
+func compareOptInt(a int, hasA bool, b int, hasB bool) int {
+	switch {
+	case !hasA && !hasB:
+		return 0
+	case !hasA:
+		return -1
+	case !hasB:
+		return 1
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// lineOf resolves the line a comment anchors to: its own line, or the end
+// line of its range, or nothing for file-level comments.
+func lineOf(c changeComment) (int, bool) {
+	if c.Line > 0 {
+		return c.Line, true
+	}
+
+	if c.sortRange != nil {
+		return c.sortRange.EndLine, true
+	}
+
+	return 0, false
+}
+
+// compareRanges orders range coordinates the way polygerrit does:
+// start line, end character, start character — a missing range sorts before
+// any present one at each step.
+func compareRanges(a, b *gerrit.CommentRange) int {
+	coords := []func(*gerrit.CommentRange) int{
+		func(r *gerrit.CommentRange) int { return r.StartLine },
+		func(r *gerrit.CommentRange) int { return r.EndCharacter },
+		func(r *gerrit.CommentRange) int { return r.StartCharacter },
+	}
+
+	for _, coord := range coords {
+		var n1, n2 int
+
+		if a != nil {
+			n1 = coord(a)
+		}
+
+		if b != nil {
+			n2 = coord(b)
+		}
+
+		if c := compareOptInt(n1, a != nil, n2, b != nil); c != 0 {
+			return c
+		}
+	}
+
+	return 0
 }
 
 func matchesStatus(t thread, status string) bool {
