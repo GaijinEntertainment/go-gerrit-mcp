@@ -40,9 +40,10 @@ func getChangeComments(c *gerritclient.Client) Tool {
 					"shows — grouped by file and reconstructed into threads with their resolved " +
 					"state. The calling account's unpublished draft comments are included, marked " +
 					"draft=\"true\" and invisible to anyone else; thread state accounts for them, " +
-					"matching what this account's Gerrit UI shows. Comment ids are the reply " +
-					"anchors for post_comments; filter status=unresolved to see what still needs " +
-					"action.",
+					"matching what this account's Gerrit UI shows. Unresolved threads render " +
+					"before resolved ones; threads follow their latest activity and comments " +
+					"their history. Comment ids are the reply anchors for post_comments; filter " +
+					"status=unresolved to see what still needs action.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in getChangeCommentsInput,
 			) (*mcp.CallToolResult, any, error) {
 				if in.Status == "" {
@@ -132,11 +133,16 @@ func draftCount(all []changeComment) int {
 type thread struct {
 	comments   []changeComment
 	unresolved bool
+	// root is the comment that anchors the thread in the UI's grouping; its
+	// path and timestamp place the thread in the output.
+	root changeComment
 }
 
-// pathPatchsetLevel is Gerrit's virtual path for patchset-level comments;
-// the change screen pins it before every real file.
-const pathPatchsetLevel = "/PATCHSET_LEVEL"
+// Gerrit's virtual file paths; the change screen pins them before real files.
+const (
+	pathPatchsetLevel = "/PATCHSET_LEVEL"
+	pathCommitMsg     = "/COMMIT_MSG"
+)
 
 // buildThreads groups comments the way the change screen does — a
 // bug-compatible replica of polygerrit's createCommentThreads (stable-3.13
@@ -177,15 +183,32 @@ func buildThreads(all []changeComment) []thread {
 	threads := make([]thread, 0, len(acc))
 
 	for _, members := range acc {
+		// State and grouping follow the UI's ordering; only after both are
+		// fixed do the comments re-sort chronologically for display.
 		last := members[len(members)-1]
+		root := members[0]
+
+		slices.SortStableFunc(members, compareChrono)
 
 		threads = append(threads, thread{
 			comments:   members,
 			unresolved: last.Unresolved != nil && *last.Unresolved,
+			root:       root,
 		})
 	}
 
 	return threads
+}
+
+// compareChrono orders comments by time, falling back to comment id only on
+// equal timestamps — the display order of comments within a thread and of
+// threads within a file.
+func compareChrono(a, b changeComment) int {
+	if c := compareUpdated(a.Updated, b.Updated); c != 0 {
+		return c
+	}
+
+	return strings.Compare(a.ID, b.ID)
 }
 
 // sanitiseRanges mirrors polygerrit's pre-sort pass: a rangeless reply
@@ -353,15 +376,61 @@ func matchesStatus(t thread, status string) bool {
 	}
 }
 
-// renderComments groups threads under the file path of their root comment,
-// in sorted path order.
+// renderComments emits attention first: an unresolved section, then a
+// resolved one — a file with both kinds of threads appears in each. Inside a
+// section files order as the change screen names them (patchset level, then
+// the commit message, then paths); threads within a file follow the time of
+// their latest comment; comments within a thread follow history. Comment ids
+// break ties everywhere.
 func renderComments(in getChangeCommentsInput, threads []thread, drafts int) string {
-	byFile := map[string][]thread{}
+	var unresolved, resolved []thread
 
 	for _, t := range threads {
-		path := t.comments[0].path
+		if !matchesStatus(t, in.Status) {
+			continue
+		}
 
-		byFile[path] = append(byFile[path], t)
+		if t.unresolved {
+			unresolved = append(unresolved, t)
+		} else {
+			resolved = append(resolved, t)
+		}
+	}
+
+	var sections []string
+
+	if s := renderSection("unresolved", unresolved); s != "" {
+		sections = append(sections, s)
+	}
+
+	if s := renderSection("resolved", resolved); s != "" {
+		sections = append(sections, s)
+	}
+
+	root := llmxml.NewElement("comments",
+		llmxml.Attr("change", in.Change),
+		llmxml.Attr("filter", in.Status),
+		llmxml.Attr("threads", len(unresolved)+len(resolved)),
+		llmxml.Attr("drafts", drafts),
+	)
+
+	if len(sections) == 0 {
+		return root.String()
+	}
+
+	return root.WrapText(strings.Join(sections, "\n")).String()
+}
+
+// renderSection wraps one resolution state's threads, grouped by the file
+// path of each thread's root comment.
+func renderSection(name string, threads []thread) string {
+	if len(threads) == 0 {
+		return ""
+	}
+
+	byFile := map[string][]thread{}
+	for _, t := range threads {
+		byFile[t.root.path] = append(byFile[t.root.path], t)
 	}
 
 	paths := make([]string, 0, len(byFile))
@@ -369,46 +438,59 @@ func renderComments(in getChangeCommentsInput, threads []thread, drafts int) str
 		paths = append(paths, path)
 	}
 
-	slices.Sort(paths)
+	slices.SortStableFunc(paths, compareRenderPaths)
 
-	var (
-		rendered    []string
-		threadCount int
-	)
+	rendered := make([]string, 0, len(paths))
 
 	for _, path := range paths {
-		var fileThreads []string
+		fileThreads := byFile[path]
+		slices.SortStableFunc(fileThreads, compareThreads)
 
-		for _, t := range byFile[path] {
-			if !matchesStatus(t, in.Status) {
-				continue
-			}
-
-			threadCount++
-
-			fileThreads = append(fileThreads, renderThread(t))
-		}
-
-		if len(fileThreads) == 0 {
-			continue
+		lines := make([]string, 0, len(fileThreads))
+		for _, t := range fileThreads {
+			lines = append(lines, renderThread(t))
 		}
 
 		rendered = append(rendered, llmxml.NewElement("file", llmxml.Attr("path", path)).
-			WrapText(strings.Join(fileThreads, "\n")).String())
+			WrapText(strings.Join(lines, "\n")).String())
 	}
 
-	root := llmxml.NewElement("comments",
-		llmxml.Attr("change", in.Change),
-		llmxml.Attr("filter", in.Status),
-		llmxml.Attr("threads", threadCount),
-		llmxml.Attr("drafts", drafts),
-	)
+	return llmxml.NewElement(name, llmxml.Attr("count", len(threads))).
+		WrapText(strings.Join(rendered, "\n")).String()
+}
 
-	if len(rendered) == 0 {
-		return root.String()
+// Display ranks for file paths: the change level first, the commit message
+// second, everything else by path.
+const (
+	rankPatchsetLevel = iota
+	rankCommitMsg
+	rankFilePath
+)
+
+// compareRenderPaths orders files for display by rank, then by path.
+func compareRenderPaths(a, b string) int {
+	rank := func(p string) int {
+		switch p {
+		case pathPatchsetLevel:
+			return rankPatchsetLevel
+		case pathCommitMsg:
+			return rankCommitMsg
+		default:
+			return rankFilePath
+		}
 	}
 
-	return root.WrapText(strings.Join(rendered, "\n")).String()
+	if ra, rb := rank(a), rank(b); ra != rb {
+		return ra - rb
+	}
+
+	return strings.Compare(a, b)
+}
+
+// compareThreads orders threads within a file by the time of their latest
+// comment — the conversation in the order it last moved.
+func compareThreads(a, b thread) int {
+	return compareChrono(a.comments[len(a.comments)-1], b.comments[len(b.comments)-1])
 }
 
 func renderThread(t thread) string {

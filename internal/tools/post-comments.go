@@ -222,7 +222,7 @@ func validateReplyTargets(ctx context.Context, c *gerritclient.Client, in postCo
 // commentable on every change.
 func magicPath(path string) bool {
 	switch path {
-	case "/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST":
+	case pathCommitMsg, pathPatchsetLevel, "/MERGE_LIST":
 		return true
 	default:
 		return false
