@@ -185,6 +185,46 @@ and enabled groups union.
   message (submit accepts none). Gerrit's refusal — a blocked submit, a restore of a merged change — is reported
   verbatim.
 
+## Review notifications
+
+An opt-in push channel for review activity. The agent subscribes to a change (`subscribe_change`), and from then on
+new change messages, votes, inline comment threads, and status transitions arrive in the session by themselves as
+`review_activity` blocks — the same llmxml vocabulary the read tools emit, activity carried whole, so nothing needs
+fetching afterwards. `unsubscribe_change` ends a subscription early; a merged or abandoned change ends its own with
+a final notification saying so, and a change that becomes unreadable (deleted, or no longer visible to the account)
+does the same naming the reason.
+
+Subscriptions are per-session and in-memory: they leave no trace on the Gerrit instance, end with the session, and
+after a server restart the agent subscribes again. With the feature off — the default — the server is byte-identical
+to its pre-feature self: no extra tools, no extra capability, no background polling.
+
+Enabling takes both sides:
+
+1. **Server** — `--review-notifications=true` (or its mirror). The server registers both subscription tools and
+   polls Gerrit every `--review-notifications-poll-interval` (default `60s`): one batched query per tick over all
+   subscribed changes, detail fetches only for changes that actually moved.
+2. **Client** — delivery rides the Claude Code **channels** contract (research preview, Claude Code ≥ 2.1.80).
+   For a server registered plainly under `mcpServers`, launch with
+   `claude --dangerously-load-development-channels server:<name>`, where `<name>` is the registration key — it
+   becomes the `source` attribute of the injected `<channel>` blocks. Allowlisted channel plugins load with
+   `claude --channels` instead.
+
+Research-preview caveats: organization policy can disable channels entirely; the flag syntax may change between
+Claude Code releases; and a client without channel support silently drops the events — the server then degrades to
+exactly its pre-feature behavior, with no errors on either side.
+
+Noise control is operator configuration, not server heuristics — nothing is filtered by message tag, because a CI
+verdict is often exactly the awaited outcome:
+
+- the authenticated account's own activity is skipped by default (`--review-notifications-include-own` keeps it);
+- `--review-notifications-exclude-accounts` silences accounts by username or numeric ID;
+- `--review-notifications-exclude-patterns` drops events whose message or comment text matches a regular
+  expression; an invalid pattern fails startup naming it.
+
+Every flag has a `GERRIT_MCP_*` mirror riding the same settings layering as the rest of the configuration (see
+[Per-project configuration](#per-project-configuration-in-claude-code)), so a project can enable notifications and
+pick its exclusions in its own settings file.
+
 ## Configuration reference
 
 Behavior is configured by CLI flags, each mirrored by an environment variable so one configuration style works for
@@ -197,6 +237,11 @@ binary and Docker invocations alike. Precedence: **flag wins over its mirror, th
 | `--own-changes-only` | `GERRIT_MCP_OWN_CHANGES_ONLY` | `true`  | Refuse trail-leaving operations on changes not owned by the authenticated account |
 | `--include-tools`    | `GERRIT_MCP_INCLUDE_TOOLS`    | (empty) | Keep only the listed tools from the group-resolved set         |
 | `--exclude-tools`    | `GERRIT_MCP_EXCLUDE_TOOLS`    | (empty) | Remove the listed tools from the group-resolved set            |
+| `--review-notifications` | `GERRIT_MCP_REVIEW_NOTIFICATIONS` | `false` | Enable [review notifications](#review-notifications) |
+| `--review-notifications-poll-interval` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL` | `60s` | Poll cadence for subscribed changes, as a Go duration |
+| `--review-notifications-include-own` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN` | `false` | Keep the authenticated account's own activity in notifications |
+| `--review-notifications-exclude-accounts` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS` | (empty) | Accounts (usernames or numeric IDs) whose activity never becomes a notification |
+| `--review-notifications-exclude-patterns` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS` | (empty) | Comma-separated regular expressions; matching message or comment text never becomes a notification |
 
 Notes:
 
