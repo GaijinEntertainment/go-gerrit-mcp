@@ -69,3 +69,18 @@ jobs:
           printf '%s\n' "$out"
           [[ "$code" -ne 0 ]] || { echo "image must exit non-zero without env" >&2; exit 1; }
           grep -q GERRIT_URL <<<"$out" || { echo "error must name the missing env var" >&2; exit 1; }
+
+  # ci-ok is the single branch-protection gate: it fails when any job of the
+  # run failed or was cancelled, and passes when every triggered job passed
+  # or was skipped — so conditional jobs never need enumerating in rulesets.
+  ci-ok:
+    if: always()
+    needs: [lint, test, release-dry-run]
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify all jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [[ "$RESULTS" != *'"failure"'* && "$RESULTS" != *'"cancelled"'* ]]
