@@ -130,9 +130,20 @@ func assemble(
 
 		s.transport = capture
 		s.tools = append(s.tools, tools.NameSubscribeChange, tools.NameUnsubscribeChange)
-		s.poller = notifications.NewPoller(
-			store, client, tools.NewDeltaRenderer(), emitter, cfg.ReviewNotificationsPollInterval, lgr,
-		)
+		s.poller = notifications.NewPoller(notifications.PollerConfig{
+			Store:    store,
+			Client:   client,
+			Renderer: tools.NewDeltaRenderer(),
+			Emitter:  emitter,
+			Filters: notifications.Filters{
+				Self:            client.Self(),
+				IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
+				ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
+				ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
+			},
+			Interval: cfg.ReviewNotificationsPollInterval,
+			Logger:   lgr,
+		})
 	}
 
 	return s, nil

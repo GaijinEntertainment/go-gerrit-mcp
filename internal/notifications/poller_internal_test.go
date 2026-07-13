@@ -164,8 +164,8 @@ type pollerFixture struct {
 }
 
 // newTestPoller wires a poller against a stub Gerrit; the interval only
-// matters for Run-based tests.
-func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
+// matters for Run-based tests, and the optional filters default to none.
+func newTestPoller(t *testing.T, interval time.Duration, filters ...Filters) *pollerFixture {
 	t.Helper()
 
 	stub := &gerritStub{}
@@ -196,8 +196,22 @@ func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
 	logs := &bytes.Buffer{}
 	lgr := slog.New(slog.NewTextHandler(logs, nil))
 
+	var f Filters
+
+	if len(filters) > 0 {
+		f = filters[0]
+	}
+
 	return &pollerFixture{
-		poller:  NewPoller(NewStore(), client, fakeRenderer{}, emitter, interval, lgr),
+		poller: NewPoller(PollerConfig{
+			Store:    NewStore(),
+			Client:   client,
+			Renderer: fakeRenderer{},
+			Emitter:  emitter,
+			Filters:  f,
+			Interval: interval,
+			Logger:   lgr,
+		}),
 		stub:    stub,
 		emitter: emitter,
 		logs:    logs,
@@ -331,6 +345,21 @@ func Test_Poller_Tick(t *testing.T) {
 
 		assert.Len(t, f.emitter.recorded(), 1)
 		assert.Contains(t, f.logs.String(), "review notification emit")
+	})
+
+	t.Run("fully filtered delta emits nothing but commits the cursor", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute, Filters{ExcludeAccounts: []string{"bob"}})
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
+
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+		f.poller.tick(t.Context())
+
+		assert.Empty(t, f.emitter.recorded(), "excluded activity must never reach the emitter")
+		assert.EqualValues(t, 1, f.stub.details.Load(), "the filtered tick must still commit the cursor")
 	})
 
 	t.Run("terminal status ends the subscription after one final emission", func(t *testing.T) {
