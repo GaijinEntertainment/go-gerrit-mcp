@@ -13,16 +13,19 @@ import (
 
 func cfg(groups []config.Group, include, exclude []string) *config.Config {
 	return &config.Config{
-		GerritURL:                       "https://gerrit.example.com",
-		Username:                        "bot",
-		Token:                           "s3cret",
-		Groups:                          groups,
-		IncludeTools:                    include,
-		ExcludeTools:                    exclude,
-		Projects:                        nil,
-		AllowForeignChanges:             false,
-		ReviewNotifications:             false,
-		ReviewNotificationsPollInterval: 0,
+		GerritURL:                          "https://gerrit.example.com",
+		Username:                           "bot",
+		Token:                              "s3cret",
+		Groups:                             groups,
+		IncludeTools:                       include,
+		ExcludeTools:                       exclude,
+		Projects:                           nil,
+		AllowForeignChanges:                false,
+		ReviewNotifications:                false,
+		ReviewNotificationsPollInterval:    0,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: nil,
+		ReviewNotificationsExcludePatterns: nil,
 	}
 }
 

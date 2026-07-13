@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ var (
 	errInvalidBool         = e.New("invalid boolean flag value")
 	errInvalidDuration     = e.New("invalid duration flag value")
 	errIntervalNotPositive = e.New("poll interval must be positive")
+	errInvalidPattern      = e.New("invalid exclude pattern")
 )
 
 // Config is the resolved server configuration.
@@ -81,6 +83,18 @@ type Config struct {
 	// notifications poller. Always resolved and validated, even when the
 	// feature is disabled.
 	ReviewNotificationsPollInterval time.Duration
+	// ReviewNotificationsIncludeOwn keeps the authenticated account's own
+	// activity in review notifications; by default own activity never
+	// becomes a notification.
+	ReviewNotificationsIncludeOwn bool
+	// ReviewNotificationsExcludeAccounts lists accounts (usernames or
+	// numeric account IDs) whose activity never becomes a review
+	// notification.
+	ReviewNotificationsExcludeAccounts []string
+	// ReviewNotificationsExcludePatterns drops review-notification events
+	// whose message or comment text matches any pattern. Compiled at load;
+	// an invalid pattern fails startup.
+	ReviewNotificationsExcludePatterns []*regexp.Regexp
 }
 
 // behaviorFlag is one CLI flag with its GERRIT_MCP_* env mirror. The flag
@@ -140,25 +154,48 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		usage:    "cadence of the review notifications poller, as a Go duration (e.g. 60s)",
 		fallback: defaultPollInterval,
 	}
+	includeOwn := behaviorFlag{
+		name:     "review-notifications-include-own",
+		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN",
+		usage:    "keep the authenticated account's own activity in review notifications",
+		fallback: "false",
+	}
+	excludeAccounts := behaviorFlag{
+		name:     "review-notifications-exclude-accounts",
+		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS",
+		usage:    "comma-separated usernames or numeric account IDs whose activity never becomes a review notification",
+		fallback: "",
+	}
+	excludePatterns := behaviorFlag{
+		name:   "review-notifications-exclude-patterns",
+		mirror: "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS",
+		usage: "comma-separated regular expressions; message or comment text matching any of them never " +
+			"becomes a review notification",
+		fallback: "",
+	}
 
 	err := resolveFlags(args, getenv, []*behaviorFlag{
-		&groups, &includeTools, &excludeTools, &projects, &ownChanges, &reviewNotifications, &pollInterval,
+		&groups, &includeTools, &excludeTools, &projects, &ownChanges,
+		&reviewNotifications, &pollInterval, &includeOwn, &excludeAccounts, &excludePatterns,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &Config{
-		GerritURL:                       getenv(EnvURL),
-		Username:                        getenv(EnvUsername),
-		Token:                           getenv(EnvToken),
-		Groups:                          nil,
-		IncludeTools:                    splitList(includeTools.value),
-		ExcludeTools:                    splitList(excludeTools.value),
-		Projects:                        splitList(projects.value),
-		AllowForeignChanges:             false,
-		ReviewNotifications:             false,
-		ReviewNotificationsPollInterval: 0,
+		GerritURL:                          getenv(EnvURL),
+		Username:                           getenv(EnvUsername),
+		Token:                              getenv(EnvToken),
+		Groups:                             nil,
+		IncludeTools:                       splitList(includeTools.value),
+		ExcludeTools:                       splitList(excludeTools.value),
+		Projects:                           splitList(projects.value),
+		AllowForeignChanges:                false,
+		ReviewNotifications:                false,
+		ReviewNotificationsPollInterval:    0,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: splitList(excludeAccounts.value),
+		ReviewNotificationsExcludePatterns: nil,
 	}
 
 	errs := missingEnv(cfg)
@@ -183,6 +220,19 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 	} else {
 		cfg.ReviewNotificationsPollInterval = interval
 	}
+
+	own, err := parseBool(includeOwn)
+	if err != nil {
+		errs = append(errs, err)
+	} else {
+		cfg.ReviewNotificationsIncludeOwn = own
+	}
+
+	patterns, patternErrs := compilePatterns(excludePatterns)
+
+	cfg.ReviewNotificationsExcludePatterns = patterns
+
+	errs = append(errs, patternErrs...)
 
 	parsed, err := parseGroups(groups.value)
 	if err != nil {
@@ -280,6 +330,31 @@ func parsePollInterval(bf behaviorFlag) (time.Duration, error) {
 	}
 
 	return d, nil
+}
+
+// compilePatterns compiles a comma-separated pattern list, reporting every
+// invalid pattern by name so the operator fixes all of them in one pass.
+func compilePatterns(bf behaviorFlag) ([]*regexp.Regexp, []error) {
+	var (
+		compiled []*regexp.Regexp
+		errs     []error
+	)
+
+	for _, p := range splitList(bf.value) {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			errs = append(errs, errInvalidPattern.Wrap(err,
+				fields.F("flag", bf.name),
+				fields.F("pattern", p),
+			))
+
+			continue
+		}
+
+		compiled = append(compiled, re)
+	}
+
+	return compiled, errs
 }
 
 // splitList splits a comma-separated list, trimming whitespace and dropping

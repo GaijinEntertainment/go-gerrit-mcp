@@ -53,16 +53,19 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 	t.Cleanup(srv.Close)
 
 	cfg := &config.Config{
-		GerritURL:                       srv.URL,
-		Username:                        "bot",
-		Token:                           "s3cret",
-		Groups:                          []config.Group{config.GroupRead},
-		IncludeTools:                    nil,
-		ExcludeTools:                    nil,
-		Projects:                        nil,
-		AllowForeignChanges:             false,
-		ReviewNotifications:             false,
-		ReviewNotificationsPollInterval: 0,
+		GerritURL:                          srv.URL,
+		Username:                           "bot",
+		Token:                              "s3cret",
+		Groups:                             []config.Group{config.GroupRead},
+		IncludeTools:                       nil,
+		ExcludeTools:                       nil,
+		Projects:                           nil,
+		AllowForeignChanges:                false,
+		ReviewNotifications:                false,
+		ReviewNotificationsPollInterval:    0,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: nil,
+		ReviewNotificationsExcludePatterns: nil,
 	}
 	for _, m := range mutate {
 		m(cfg)
