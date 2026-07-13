@@ -36,16 +36,19 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 	t.Cleanup(srv.Close)
 
 	client, err := gerritclient.New(t.Context(), &config.Config{
-		GerritURL:                       srv.URL,
-		Username:                        "bot",
-		Token:                           "s3cret",
-		Groups:                          []config.Group{config.GroupRead},
-		IncludeTools:                    nil,
-		ExcludeTools:                    nil,
-		Projects:                        nil,
-		AllowForeignChanges:             false,
-		ReviewNotifications:             false,
-		ReviewNotificationsPollInterval: 0,
+		GerritURL:                          srv.URL,
+		Username:                           "bot",
+		Token:                              "s3cret",
+		Groups:                             []config.Group{config.GroupRead},
+		IncludeTools:                       nil,
+		ExcludeTools:                       nil,
+		Projects:                           nil,
+		AllowForeignChanges:                false,
+		ReviewNotifications:                false,
+		ReviewNotificationsPollInterval:    0,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: nil,
+		ReviewNotificationsExcludePatterns: nil,
 	})
 	require.NoError(t, err)
 
@@ -54,16 +57,19 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 
 func testConfig(reviewNotifications bool, interval time.Duration) *config.Config {
 	return &config.Config{
-		GerritURL:                       "",
-		Username:                        "",
-		Token:                           "",
-		Groups:                          []config.Group{config.GroupRead},
-		IncludeTools:                    nil,
-		ExcludeTools:                    nil,
-		Projects:                        nil,
-		AllowForeignChanges:             false,
-		ReviewNotifications:             reviewNotifications,
-		ReviewNotificationsPollInterval: interval,
+		GerritURL:                          "",
+		Username:                           "",
+		Token:                              "",
+		Groups:                             []config.Group{config.GroupRead},
+		IncludeTools:                       nil,
+		ExcludeTools:                       nil,
+		Projects:                           nil,
+		AllowForeignChanges:                false,
+		ReviewNotifications:                reviewNotifications,
+		ReviewNotificationsPollInterval:    interval,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: nil,
+		ReviewNotificationsExcludePatterns: nil,
 	}
 }
 

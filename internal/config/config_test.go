@@ -375,6 +375,115 @@ func Test_Load_ReviewNotifications(t *testing.T) {
 	})
 }
 
+func Test_Load_ReviewNotificationFilters(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero config resolves to no-op filters", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load(nil, env(secrets()))
+		require.NoError(t, err)
+		assert.False(t, cfg.ReviewNotificationsIncludeOwn)
+		assert.Nil(t, cfg.ReviewNotificationsExcludeAccounts)
+		assert.Nil(t, cfg.ReviewNotificationsExcludePatterns)
+	})
+
+	t.Run("include-own resolves from flag", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{"--review-notifications-include-own", "true"}, env(secrets()))
+		require.NoError(t, err)
+		assert.True(t, cfg.ReviewNotificationsIncludeOwn)
+	})
+
+	t.Run("include-own flag wins over env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN"] = "true"
+
+		cfg, err := config.Load([]string{"--review-notifications-include-own=false"}, env(m))
+		require.NoError(t, err)
+		assert.False(t, cfg.ReviewNotificationsIncludeOwn)
+	})
+
+	t.Run("exclude-accounts parses from flag with whitespace", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{
+			"--review-notifications-exclude-accounts", " ci-bot , 1000042 ",
+		}, env(secrets()))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"ci-bot", "1000042"}, cfg.ReviewNotificationsExcludeAccounts)
+	})
+
+	t.Run("exclude-accounts resolves from env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS"] = "ci-bot"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"ci-bot"}, cfg.ReviewNotificationsExcludeAccounts)
+	})
+
+	t.Run("exclude-patterns compile from a comma-separated flag", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load([]string{
+			"--review-notifications-exclude-patterns", `^Uploaded patch set, ^Build (started|running)`,
+		}, env(secrets()))
+		require.NoError(t, err)
+
+		patterns := cfg.ReviewNotificationsExcludePatterns
+		require.Len(t, patterns, 2)
+		assert.True(t, patterns[0].MatchString("Uploaded patch set 4"))
+		assert.True(t, patterns[1].MatchString("Build running: 12 files"))
+		assert.False(t, patterns[1].MatchString("Build finished"))
+	})
+
+	t.Run("exclude-patterns resolve from env mirror", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS"] = "^Uploaded patch set"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+
+		require.Len(t, cfg.ReviewNotificationsExcludePatterns, 1)
+		assert.Equal(t, "^Uploaded patch set", cfg.ReviewNotificationsExcludePatterns[0].String())
+	})
+
+	t.Run("invalid pattern fails startup naming it", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Load([]string{"--review-notifications-exclude-patterns", "[unclosed"}, env(secrets()))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid exclude pattern")
+		assert.ErrorContains(t, err, "[unclosed")
+	})
+
+	t.Run("every invalid pattern named alongside other errors", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+		delete(m, "GERRIT_TOKEN")
+
+		_, err := config.Load([]string{
+			"--review-notifications-exclude-patterns", "[one,ok.*,(two",
+		}, env(m))
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "[one")
+		assert.ErrorContains(t, err, "(two")
+		assert.ErrorContains(t, err, "GERRIT_TOKEN")
+	})
+}
+
 func Test_Load_Connection(t *testing.T) {
 	t.Parallel()
 

@@ -100,16 +100,19 @@ func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
 	t.Cleanup(srv.Close)
 
 	client, err := gerritclient.New(t.Context(), &config.Config{
-		GerritURL:                       srv.URL,
-		Username:                        "bot",
-		Token:                           "s3cret",
-		Groups:                          []config.Group{config.GroupRead},
-		IncludeTools:                    nil,
-		ExcludeTools:                    nil,
-		Projects:                        nil,
-		AllowForeignChanges:             false,
-		ReviewNotifications:             true,
-		ReviewNotificationsPollInterval: interval,
+		GerritURL:                          srv.URL,
+		Username:                           "bot",
+		Token:                              "s3cret",
+		Groups:                             []config.Group{config.GroupRead},
+		IncludeTools:                       nil,
+		ExcludeTools:                       nil,
+		Projects:                           nil,
+		AllowForeignChanges:                false,
+		ReviewNotifications:                true,
+		ReviewNotificationsPollInterval:    interval,
+		ReviewNotificationsIncludeOwn:      false,
+		ReviewNotificationsExcludeAccounts: nil,
+		ReviewNotificationsExcludePatterns: nil,
 	})
 	require.NoError(t, err)
 
