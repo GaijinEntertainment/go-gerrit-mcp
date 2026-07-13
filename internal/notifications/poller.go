@@ -121,6 +121,20 @@ func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
 
 	delta, next := extractDelta(cur, info, comments)
 
+	// A terminal status ends the subscription: the change leaves the store
+	// first — an unsubscribe racing this tick wins — and the final
+	// notification carries the transition together with any same-tick
+	// activity. Terminal implies a transition, so the delta is never empty.
+	if IsTerminal(info.Status) {
+		if !p.store.Remove(change) {
+			return
+		}
+
+		p.emit(ctx, delta)
+
+		return
+	}
+
 	// An unsubscribe racing this tick wins: nothing is committed or emitted.
 	if !p.store.SetCursor(change, next) {
 		return

@@ -14,4 +14,7 @@ fixed in ps2
 </thread>
 </file>
 <transition from="NEW" to="MERGED"/>
+<subscription ended="true">
+The change reached MERGED, so this subscription ended automatically; no further notifications for this change will arrive.
+</subscription>
 </review_activity>

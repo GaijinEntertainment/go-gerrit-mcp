@@ -27,6 +27,14 @@ type Transition struct {
 	To   string
 }
 
+// IsTerminal reports whether a change status ends its subscription: a merged
+// or abandoned change almost never needs further watching, and the model
+// learns the subscription ended from the final notification rather than
+// inferring it from silence (ADR 2.2).
+func IsTerminal(status string) bool {
+	return status == "MERGED" || status == "ABANDONED"
+}
+
 // Delta is one change's new review activity since the previous report,
 // together with the context a renderer needs to compose a self-sufficient
 // payload.
