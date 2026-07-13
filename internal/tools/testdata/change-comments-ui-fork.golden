@@ -1,0 +1,17 @@
+<comments change="123" filter="all" threads="2" drafts="0">
+<file path="core/scanner.go">
+<thread resolved="false">
+<comment id="root" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="2" lines="20-27">
+Needs coverage
+</comment>
+<comment id="reraise" author="Bob (bob)" date="2026-07-03T11:00:00Z" patch_set="3" line="27" in_reply_to="root">
+Still needs coverage
+</comment>
+</thread>
+<thread resolved="true">
+<comment id="reply-resolving" author="Alice (alice)" date="2026-07-03T12:00:00Z" patch_set="3" line="27" in_reply_to="reraise">
+Position unchanged
+</comment>
+</thread>
+</file>
+</comments>

@@ -246,6 +246,38 @@ func Test_GetChangeComments(t *testing.T) {
 		golden(t, "change-comments-renamed", out)
 	})
 
+	t.Run("rangeless reply ahead of its ranged parent forks, as on the change screen", func(t *testing.T) {
+		t.Parallel()
+
+		// The change screen's threading is order-dependent: the root carries
+		// a range, the re-raise inherits it via sanitiseRanges, but the
+		// resolving reply precedes its parent in the payload array and stays
+		// rangeless — so it sorts before its parent and forks into its own
+		// thread. The displayed thread then ends on the unresolved re-raise.
+		const published = ")]}'\n" + `{
+		  "core/scanner.go": [
+		    {"id": "reply-resolving", "in_reply_to": "reraise", "line": 27, "patch_set": 3,
+		     "message": "Position unchanged", "unresolved": false,
+		     "updated": "2026-07-03 12:00:00.000000000",
+		     "author": {"_account_id": 7, "name": "Alice", "username": "alice"}},
+		    {"id": "root", "line": 27, "patch_set": 2, "range": {"start_line": 20, "end_line": 27},
+		     "message": "Needs coverage", "unresolved": true,
+		     "updated": "2026-07-01 10:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}},
+		    {"id": "reraise", "in_reply_to": "root", "line": 27, "patch_set": 3,
+		     "message": "Still needs coverage", "unresolved": true,
+		     "updated": "2026-07-03 11:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}}
+		  ]
+		}`
+
+		cs := commentsSession(t, published, emptyDraftsJSON)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+
+		golden(t, "change-comments-ui-fork", out)
+	})
+
 	t.Run("same-timestamp fork orders by comment id", func(t *testing.T) {
 		t.Parallel()
 

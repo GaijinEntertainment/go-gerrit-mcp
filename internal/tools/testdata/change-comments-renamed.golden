@@ -1,11 +1,15 @@
-<comments change="123" filter="all" threads="1" drafts="0">
-<file path="core/old-name.go">
+<comments change="123" filter="all" threads="2" drafts="0">
+<file path="core/new-name.go">
 <thread resolved="true">
-<comment id="r1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="5">
-Rename this too
-</comment>
 <comment id="r2" author="Alice (alice)" date="2026-07-02T10:00:00Z" patch_set="2" line="5" in_reply_to="r1">
 Done
+</comment>
+</thread>
+</file>
+<file path="core/old-name.go">
+<thread resolved="false">
+<comment id="r1" author="Bob (bob)" date="2026-07-01T10:00:00Z" patch_set="1" line="5">
+Rename this too
 </comment>
 </thread>
 </file>
