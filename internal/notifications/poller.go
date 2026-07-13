@@ -34,23 +34,33 @@ type Poller struct {
 	client   *gerritclient.Client
 	renderer Renderer
 	emitter  Emitter
+	filters  Filters
 	interval time.Duration
 	lgr      *slog.Logger
 }
 
+// PollerConfig carries everything a poller is assembled from.
+type PollerConfig struct {
+	Store    *Store
+	Client   *gerritclient.Client
+	Renderer Renderer
+	Emitter  Emitter
+	Filters  Filters
+	Interval time.Duration
+	Logger   *slog.Logger
+}
+
 // NewPoller assembles a poller over the given subscription store. It does not
 // start anything; the caller runs [Poller.Run] on its own goroutine.
-func NewPoller(
-	store *Store, client *gerritclient.Client, renderer Renderer, emitter Emitter,
-	interval time.Duration, lgr *slog.Logger,
-) *Poller {
+func NewPoller(cfg PollerConfig) *Poller {
 	return &Poller{
-		store:    store,
-		client:   client,
-		renderer: renderer,
-		emitter:  emitter,
-		interval: interval,
-		lgr:      lgr,
+		store:    cfg.Store,
+		client:   cfg.Client,
+		renderer: cfg.Renderer,
+		emitter:  cfg.Emitter,
+		filters:  cfg.Filters,
+		interval: cfg.Interval,
+		lgr:      cfg.Logger,
 	}
 }
 
@@ -120,6 +130,10 @@ func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
 	}
 
 	delta, next := extractDelta(cur, info, comments)
+
+	// Filters run between extraction and rendering, so excluded activity
+	// never reaches the model — including inside a final payload.
+	p.filters.apply(delta)
 
 	// A terminal status ends the subscription: the change leaves the store
 	// first — an unsubscribe racing this tick wins — and the final
