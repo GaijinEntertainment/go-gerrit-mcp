@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -156,20 +156,49 @@ func Test_Assemble_TracerBullet(t *testing.T) {
 
 	const receiveTimeout = 10 * time.Second
 
-	fetched := ")]}'\n" + `{"_number":123,"project":"core","status":"NEW",` +
+	initialDetail := ")]}'\n" + `{"_number":123,"project":"core","status":"NEW",` +
 		`"updated":"2026-07-01 10:00:00.000000000",` +
 		`"current_revision":"abc","revisions":{"abc":{"_number":1}}}`
-	moved := ")]}'\n" + `[{"_number":123,"project":"core","status":"NEW",` +
+	movedDetail := ")]}'\n" + `{"_number":123,"project":"core","status":"NEW",` +
+		`"updated":"2026-07-01 11:00:00.000000000",` +
+		`"current_revision":"abc","revisions":{"abc":{"_number":1}},` +
+		`"messages":[{"id":"m1","author":{"_account_id":8,"username":"bob"},` +
+		`"date":"2026-07-01 11:00:00.000000000","message":"ping","_revision_number":1}]}`
+	movedQuery := ")]}'\n" + `[{"_number":123,"project":"core","status":"NEW",` +
 		`"updated":"2026-07-01 11:00:00.000000000"}]`
 
+	// moved flips after the subscribe call: the stub then reports the change
+	// as updated so the next poll tick picks it up.
+	var moved atomic.Bool
+
 	client := testGerritClient(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/a/accounts/self":
+		switch r.URL.Path {
+		case "/a/accounts/self":
 			_, _ = w.Write([]byte(stubSelfJSON))
-		case strings.HasPrefix(r.URL.Path, "/a/changes/123"):
-			_, _ = w.Write([]byte(fetched))
+
+		case "/a/changes/":
+			if moved.Load() {
+				_, _ = w.Write([]byte(movedQuery))
+
+				return
+			}
+
+			_, _ = w.Write([]byte(")]}'\n[]"))
+
+		case "/a/changes/123":
+			if moved.Load() {
+				_, _ = w.Write([]byte(movedDetail))
+
+				return
+			}
+
+			_, _ = w.Write([]byte(initialDetail))
+
+		case "/a/changes/123/comments":
+			_, _ = w.Write([]byte(")]}'\n{}"))
+
 		default:
-			_, _ = w.Write([]byte(moved))
+			w.WriteHeader(http.StatusNotFound)
 		}
 	})
 
@@ -194,6 +223,8 @@ func Test_Assemble_TracerBullet(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, res.IsError)
+
+	moved.Store(true)
 
 	select {
 	case req := <-observed.notifications:

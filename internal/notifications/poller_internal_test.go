@@ -21,10 +21,24 @@ import (
 
 const selfJSON = ")]}'\n" + `{"_account_id":42,"name":"Review Bot","username":"bot"}`
 
-// changeJSON renders one change query result; updated is a Gerrit-format
-// timestamp such as "2026-07-01 10:00:00.000000000".
-func changeJSON(updated string) string {
+// queryJSON renders the batched-query result for change 123; updated is a
+// Gerrit-format timestamp such as "2026-07-01 10:00:00.000000000".
+func queryJSON(updated string) string {
 	return ")]}'\n" + `[{"_number":123,"project":"core","status":"NEW","updated":"` + updated + `"}]`
+}
+
+// detailJSON renders the detailed fetch of change 123 carrying one change
+// message dated at updated.
+func detailJSON(updated string) string {
+	return ")]}'\n" + `{"_number":123,"project":"core","status":"NEW","updated":"` + updated + `",` +
+		`"messages":[{"id":"m1","author":{"_account_id":8,"username":"bob"},"date":"` + updated + `",` +
+		`"message":"ping","_revision_number":2}]}`
+}
+
+// quietDetailJSON renders a detailed fetch whose updated moved with nothing
+// extractable behind it.
+func quietDetailJSON(updated string) string {
+	return ")]}'\n" + `{"_number":123,"project":"core","status":"NEW","updated":"` + updated + `"}`
 }
 
 type emitCall struct {
@@ -55,26 +69,69 @@ func (f *fakeEmitter) recorded() []emitCall {
 	return append([]emitCall(nil), f.calls...)
 }
 
-// gerritStub serves the credential-validation endpoint plus change queries,
-// counting query requests and answering them via the swappable handler.
+// gerritStub serves the four endpoints the poller path touches, counting
+// query and detail requests. Response bodies are swappable per test; an
+// empty body answers 500.
 type gerritStub struct {
-	queries atomic.Int64                     `exhaustruct:"optional"`
-	handler atomic.Pointer[http.HandlerFunc] `exhaustruct:"optional"`
+	queries atomic.Int64 `exhaustruct:"optional"`
+	details atomic.Int64 `exhaustruct:"optional"`
+
+	mu       sync.Mutex `exhaustruct:"optional"`
+	query    string     `exhaustruct:"optional"`
+	detail   string     `exhaustruct:"optional"`
+	comments string     `exhaustruct:"optional"`
 }
 
-func (g *gerritStub) setHandler(h http.HandlerFunc) {
-	g.handler.Store(&h)
+func (g *gerritStub) set(query, detail string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.query = query
+	g.detail = detail
 }
 
-func (g *gerritStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/a/accounts/self" {
-		_, _ = w.Write([]byte(selfJSON))
+func (g *gerritStub) setComments(comments string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.comments = comments
+}
+
+func respond(w http.ResponseWriter, body string) {
+	if body == "" {
+		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
 
-	g.queries.Add(1)
-	(*g.handler.Load())(w, r)
+	_, _ = w.Write([]byte(body))
+}
+
+func (g *gerritStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+
+	query, detail, comments := g.query, g.detail, g.comments
+
+	g.mu.Unlock()
+
+	switch r.URL.Path {
+	case "/a/accounts/self":
+		_, _ = w.Write([]byte(selfJSON))
+
+	case "/a/changes/":
+		g.queries.Add(1)
+		respond(w, query)
+
+	case "/a/changes/123":
+		g.details.Add(1)
+		respond(w, detail)
+
+	case "/a/changes/123/comments":
+		respond(w, comments)
+
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 // pollerFixture bundles a poller with the stub Gerrit, the recording
@@ -92,9 +149,8 @@ func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
 	t.Helper()
 
 	stub := &gerritStub{}
-	stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(")]}'\n[]"))
-	})
+	stub.set(")]}'\n[]", "")
+	stub.setComments(")]}'\n{}")
 
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
@@ -128,20 +184,27 @@ func newTestPoller(t *testing.T, interval time.Duration) *pollerFixture {
 	}
 }
 
+func seedCursor(t *testing.T) Cursor {
+	t.Helper()
+
+	return NewCursor(time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC), "NEW")
+}
+
 func Test_Poller_Tick(t *testing.T) {
 	t.Parallel()
 
-	base := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	const (
+		movedAt = "2026-07-01 11:00:00.000000000"
+		seedAt  = "2026-07-01 10:00:00.000000000"
+	)
 
-	t.Run("movement emits once and advances the cursor", func(t *testing.T) {
+	t.Run("movement emits one delta and replay is silent", func(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(changeJSON("2026-07-01 11:00:00.000000000")))
-		})
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
 
-		f.poller.store.Add(123, base)
+		f.poller.store.Add(123, seedCursor(t))
 
 		f.poller.tick(t.Context())
 		f.poller.tick(t.Context())
@@ -152,21 +215,37 @@ func Test_Poller_Tick(t *testing.T) {
 			`<review_activity change="123" project="core" status="NEW" updated="2026-07-01T11:00:00Z"/>`,
 			calls[0].content)
 		assert.Equal(t, map[string]string{"change": "123"}, calls[0].meta)
+
+		assert.EqualValues(t, 1, f.stub.details.Load(), "replay must not re-fetch an unmoved change")
 	})
 
-	t.Run("no movement emits nothing", func(t *testing.T) {
+	t.Run("movement with an empty delta commits silently", func(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(changeJSON("2026-07-01 10:00:00.000000000")))
-		})
+		f.stub.set(queryJSON(movedAt), quietDetailJSON(movedAt))
 
-		f.poller.store.Add(123, base)
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+		f.poller.tick(t.Context())
+
+		assert.Empty(t, f.emitter.recorded())
+		assert.EqualValues(t, 1, f.stub.details.Load(), "the committed cursor must stop repeat detail fetches")
+	})
+
+	t.Run("no movement fetches no detail and emits nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(queryJSON(seedAt), detailJSON(seedAt))
+
+		f.poller.store.Add(123, seedCursor(t))
 
 		f.poller.tick(t.Context())
 
 		assert.Empty(t, f.emitter.recorded())
+		assert.Zero(t, f.stub.details.Load())
 	})
 
 	t.Run("empty subscription set skips the query", func(t *testing.T) {
@@ -184,37 +263,51 @@ func Test_Poller_Tick(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		})
+		f.stub.set("", detailJSON(movedAt))
 
-		f.poller.store.Add(123, base)
+		f.poller.store.Add(123, seedCursor(t))
 
 		f.poller.tick(t.Context())
 
 		assert.Empty(t, f.emitter.recorded())
 		assert.Contains(t, f.logs.String(), "review notifications poll")
 
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(changeJSON("2026-07-01 11:00:00.000000000")))
-		})
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
 
 		f.poller.tick(t.Context())
 
 		assert.Len(t, f.emitter.recorded(), 1, "poll failure must not end the subscription")
 	})
 
+	t.Run("detail failure leaves the cursor for a retry", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(queryJSON(movedAt), "")
+
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+
+		assert.Empty(t, f.emitter.recorded())
+		assert.Contains(t, f.logs.String(), "review notifications detail fetch")
+
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
+
+		f.poller.tick(t.Context())
+
+		assert.Len(t, f.emitter.recorded(), 1, "the un-advanced cursor must retry the change")
+	})
+
 	t.Run("emit failure is logged and does not stop the tick", func(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(changeJSON("2026-07-01 11:00:00.000000000")))
-		})
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
 
 		f.emitter.err = e.New("session gone")
 
-		f.poller.store.Add(123, base)
+		f.poller.store.Add(123, seedCursor(t))
 
 		f.poller.tick(t.Context())
 
@@ -226,15 +319,14 @@ func Test_Poller_Tick(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(changeJSON("2026-07-01 11:00:00.000000000")))
-		})
+		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
 
-		f.poller.store.Add(456, base)
+		f.poller.store.Add(456, seedCursor(t))
 
 		f.poller.tick(t.Context())
 
 		assert.Empty(t, f.emitter.recorded())
+		assert.Zero(t, f.stub.details.Load())
 	})
 }
 
@@ -243,14 +335,10 @@ func Test_Poller_Run(t *testing.T) {
 
 	const pollDeadline = 10 * time.Second
 
-	base := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
-
 	f := newTestPoller(t, 5*time.Millisecond)
-	f.stub.setHandler(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(changeJSON("2026-07-01 11:00:00.000000000")))
-	})
+	f.stub.set(queryJSON("2026-07-01 11:00:00.000000000"), detailJSON("2026-07-01 11:00:00.000000000"))
 
-	f.poller.store.Add(123, base)
+	f.poller.store.Add(123, seedCursor(t))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
