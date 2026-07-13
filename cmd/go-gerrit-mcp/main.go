@@ -58,6 +58,31 @@ func run(lgr *slog.Logger) error {
 		return err
 	}
 
+	s, err := assemble(cfg, client, &mcp.StdioTransport{})
+	if err != nil {
+		return err
+	}
+
+	lgr.Info("serving over stdio",
+		"account", client.Self().Username,
+		"groups", cfg.Groups,
+		"tools", s.tools,
+	)
+
+	return s.run(ctx)
+}
+
+// server is an assembled MCP server: the transport it runs over and the
+// names of the tools it registered.
+type server struct {
+	mcp       *mcp.Server
+	transport mcp.Transport
+	tools     []string
+}
+
+// assemble builds the MCP server over the given transport: capability-group
+// tool resolution and registration, error middleware, instructions.
+func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Transport) (*server, error) {
 	srv := mcp.NewServer(
 		&mcp.Implementation{Name: serverName, Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
@@ -66,7 +91,7 @@ func run(lgr *slog.Logger) error {
 
 	enabled, err := registry.Resolve(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	set := make(map[string]bool, len(enabled))
@@ -80,13 +105,12 @@ func run(lgr *slog.Logger) error {
 		}
 	}
 
-	lgr.Info("serving over stdio",
-		"account", client.Self().Username,
-		"groups", cfg.Groups,
-		"tools", enabled,
-	)
+	return &server{mcp: srv, transport: transport, tools: enabled}, nil
+}
 
-	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
+// run serves MCP over the assembled transport until ctx cancels.
+func (s *server) run(ctx context.Context) error {
+	if err := s.mcp.Run(ctx, s.transport); err != nil {
 		return e.NewFrom("run mcp server", err)
 	}
 
