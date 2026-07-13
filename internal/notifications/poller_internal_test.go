@@ -89,6 +89,11 @@ func (fakeRenderer) Render(d *Delta) (string, map[string]string) {
 		map[string]string{"change": strconv.Itoa(d.Change.Number)}
 }
 
+func (fakeRenderer) RenderEnded(change int, reason string) (string, map[string]string) {
+	return fmt.Sprintf("ended change=%d reason=%q", change, reason),
+		map[string]string{"change": strconv.Itoa(change)}
+}
+
 // gerritStub serves the four endpoints the poller path touches, counting
 // query and detail requests. Response bodies are swappable per test; an
 // empty body answers 500.
@@ -96,10 +101,12 @@ type gerritStub struct {
 	queries atomic.Int64 `exhaustruct:"optional"`
 	details atomic.Int64 `exhaustruct:"optional"`
 
-	mu       sync.Mutex `exhaustruct:"optional"`
-	query    string     `exhaustruct:"optional"`
-	detail   string     `exhaustruct:"optional"`
-	comments string     `exhaustruct:"optional"`
+	mu         sync.Mutex          `exhaustruct:"optional"`
+	query      string              `exhaustruct:"optional"`
+	detail     string              `exhaustruct:"optional"`
+	detailCode int                 `exhaustruct:"optional"`
+	detailHook func(*http.Request) `exhaustruct:"optional"`
+	comments   string              `exhaustruct:"optional"`
 }
 
 func (g *gerritStub) set(query, detail string) {
@@ -108,6 +115,25 @@ func (g *gerritStub) set(query, detail string) {
 
 	g.query = query
 	g.detail = detail
+	g.detailCode = 0
+}
+
+// setDetailCode makes the detail endpoint answer the given HTTP status with
+// a plain-text body.
+func (g *gerritStub) setDetailCode(code int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.detailCode = code
+}
+
+// setDetailHook installs a callback the detail endpoint runs before
+// responding; used to block a fetch until its request context cancels.
+func (g *gerritStub) setDetailHook(hook func(*http.Request)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.detailHook = hook
 }
 
 func (g *gerritStub) setComments(comments string) {
@@ -130,7 +156,7 @@ func respond(w http.ResponseWriter, body string) {
 func (g *gerritStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 
-	query, detail, comments := g.query, g.detail, g.comments
+	query, detail, detailCode, detailHook, comments := g.query, g.detail, g.detailCode, g.detailHook, g.comments
 
 	g.mu.Unlock()
 
@@ -144,6 +170,19 @@ func (g *gerritStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "/a/changes/123":
 		g.details.Add(1)
+
+		if detailHook != nil {
+			detailHook(r)
+		}
+
+		if detailCode != 0 {
+			w.WriteHeader(detailCode)
+
+			_, _ = w.Write([]byte("Not found: change 123"))
+
+			return
+		}
+
 		respond(w, detail)
 
 	case "/a/changes/123/comments":
@@ -384,19 +423,140 @@ func Test_Poller_Tick(t *testing.T) {
 		assert.EqualValues(t, 1, f.stub.queries.Load(), "an empty store must stop polling entirely")
 	})
 
-	t.Run("result for an unsubscribed change is ignored", func(t *testing.T) {
+	t.Run("lost access mid-process ends the subscription with a notice", func(t *testing.T) {
 		t.Parallel()
 
 		f := newTestPoller(t, time.Minute)
-		f.stub.set(queryJSON(movedAt), detailJSON(movedAt))
+		f.stub.set(queryJSON(movedAt), "")
+		f.stub.setDetailCode(http.StatusNotFound)
 
-		f.poller.store.Add(456, seedCursor(t))
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+
+		calls := f.emitter.recorded()
+		require.Len(t, calls, 1)
+		assert.Equal(t,
+			`ended change=123 reason="the change was deleted or is no longer visible to this account"`,
+			calls[0].content)
+		assert.Empty(t, f.poller.store.Changes())
+	})
+
+	t.Run("change missing from the query is confirmed before its subscription ends", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(")]}'\n[]", "")
+		f.stub.setDetailCode(http.StatusNotFound)
+
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+
+		require.Len(t, f.emitter.recorded(), 1)
+		assert.Empty(t, f.poller.store.Changes())
+		assert.EqualValues(t, 1, f.stub.details.Load(), "the absence must be confirmed by a direct fetch")
+	})
+
+	t.Run("query staleness alone does not end a subscription", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(")]}'\n[]", quietDetailJSON(seedAt))
+
+		f.poller.store.Add(123, seedCursor(t))
 
 		f.poller.tick(t.Context())
 
 		assert.Empty(t, f.emitter.recorded())
-		assert.Zero(t, f.stub.details.Load())
+		assert.Equal(t, []int{123}, f.poller.store.Changes(), "a fetchable change stays subscribed")
+		assert.EqualValues(t, 1, f.stub.details.Load())
 	})
+
+	t.Run("result for an unsubscribed change is ignored", func(t *testing.T) {
+		t.Parallel()
+
+		foreignQuery := ")]}'\n" + `[{"_number":456,"project":"core","status":"NEW","updated":"` + movedAt + `"}]`
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(foreignQuery, quietDetailJSON(seedAt))
+
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+
+		assert.Empty(t, f.emitter.recorded())
+		assert.Equal(t, []int{123}, f.poller.store.Changes(),
+			"the confirmed-fetchable subscription must survive the foreign result")
+	})
+}
+
+func Test_InaccessibleReason(t *testing.T) {
+	t.Parallel()
+
+	t.Run("project scope loss is classified with its own reason", func(t *testing.T) {
+		t.Parallel()
+
+		reason, gone := inaccessibleReason(gerritclient.ErrProjectScope.WithField("change", "123"))
+		assert.True(t, gone)
+		assert.Contains(t, reason, "project scope")
+	})
+
+	t.Run("other failures are transient", func(t *testing.T) {
+		t.Parallel()
+
+		_, gone := inaccessibleReason(e.New("gerrit is down"))
+		assert.False(t, gone)
+
+		_, gone = inaccessibleReason(context.Canceled)
+		assert.False(t, gone)
+	})
+}
+
+// Test_Poller_MidTickCancellation proves a cancelled context aborts a tick
+// promptly — even mid-fetch — without emitting and without ending the
+// subscription.
+func Test_Poller_MidTickCancellation(t *testing.T) {
+	t.Parallel()
+
+	const deadline = 10 * time.Second
+
+	f := newTestPoller(t, time.Minute)
+
+	started := make(chan struct{})
+	f.stub.setDetailHook(func(r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	})
+	f.stub.set(queryJSON("2026-07-01 11:00:00.000000000"), detailJSON("2026-07-01 11:00:00.000000000"))
+
+	f.poller.store.Add(123, seedCursor(t))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		f.poller.tick(ctx)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(deadline):
+		t.Fatal("detail fetch never started")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(deadline):
+		t.Fatal("tick did not stop on context cancellation")
+	}
+
+	assert.Empty(t, f.emitter.recorded(), "a cancelled tick must not emit")
+	assert.Equal(t, []int{123}, f.poller.store.Changes(), "cancellation must not end the subscription")
 }
 
 func Test_Poller_Run(t *testing.T) {

@@ -200,6 +200,16 @@ func Test_DeltaRenderer(t *testing.T) {
 		}, meta)
 	})
 
+	t.Run("ended notice names the reason", func(t *testing.T) {
+		t.Parallel()
+
+		content, meta := renderer.RenderEnded(123,
+			"the change was deleted or is no longer visible to this account")
+
+		golden(t, "render-activity-ended", content)
+		assert.Equal(t, map[string]string{"change": "123", "kind": "ended"}, meta)
+	})
+
 	t.Run("meta keys satisfy the channel identifier restriction", func(t *testing.T) {
 		t.Parallel()
 
