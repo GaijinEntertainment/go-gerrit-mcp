@@ -64,8 +64,9 @@ func (p *Poller) Run(ctx context.Context) {
 }
 
 // tick runs one poll cycle: a single batched query over the subscription
-// snapshot, cursor advancement, and emission for every change that moved.
-// An empty snapshot skips the cycle without touching the network.
+// snapshot, then a detail pass over every change whose updated timestamp
+// moved past its cursor. An empty snapshot skips the cycle without touching
+// the network.
 func (p *Poller) tick(ctx context.Context) {
 	changes := p.store.Changes()
 	if len(changes) == 0 {
@@ -82,19 +83,54 @@ func (p *Poller) tick(ctx context.Context) {
 	for i := range res.Changes {
 		ci := &res.Changes[i]
 
-		if !p.store.Advance(ci.Number, ci.Updated.Time) {
+		cur, ok := p.store.Cursor(ci.Number)
+		if !ok || !ci.Updated.After(cur.Updated) {
 			continue
 		}
 
-		p.emit(ctx, ci)
+		p.process(ctx, ci.Number, cur)
 	}
 }
 
-func (p *Poller) emit(ctx context.Context, ci *gerrit.ChangeInfo) {
-	meta := map[string]string{"change": strconv.Itoa(ci.Number)}
+// process fetches a moved change in detail, extracts the activity delta
+// against the cursor, commits the cursor, and emits the delta. A fetch
+// failure leaves the cursor untouched so the next tick retries the change.
+func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
+	id := strconv.Itoa(change)
 
-	if err := p.emitter.Emit(ctx, renderActivity(ci), meta); err != nil {
-		p.lgr.Error("review notification emit", "change", ci.Number, "error", err)
+	info, err := p.client.GetChange(ctx, id)
+	if err != nil {
+		p.lgr.Error("review notifications detail fetch", "change", change, "error", err)
+
+		return
+	}
+
+	comments, err := p.client.ListChangeComments(ctx, id)
+	if err != nil {
+		p.lgr.Error("review notifications comment fetch", "change", change, "error", err)
+
+		return
+	}
+
+	delta, next := extractDelta(cur, info, comments)
+
+	// An unsubscribe racing this tick wins: nothing is committed or emitted.
+	if !p.store.SetCursor(change, next) {
+		return
+	}
+
+	if delta.Empty() {
+		return
+	}
+
+	p.emit(ctx, delta)
+}
+
+func (p *Poller) emit(ctx context.Context, d *Delta) {
+	meta := map[string]string{"change": strconv.Itoa(d.Change.Number)}
+
+	if err := p.emitter.Emit(ctx, renderActivity(d.Change), meta); err != nil {
+		p.lgr.Error("review notification emit", "change", d.Change.Number, "error", err)
 	}
 }
 

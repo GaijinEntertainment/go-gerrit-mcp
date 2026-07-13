@@ -40,7 +40,7 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 					return nil, nil, err
 				}
 
-				if !store.Add(info.Number, info.Updated.Time) {
+				if !store.Add(info.Number, notifications.NewCursor(info.Updated.Time, info.Status)) {
 					return nil, nil, ErrAlreadySubscribed.WithField("change", info.Number)
 				}
 
