@@ -18,6 +18,10 @@ import (
 // contract (ADR 2.1, docs/glossary.md: Channel).
 const channelMethod = "notifications/claude/channel"
 
+// channelCapability is the experimental capability declared at initialize
+// when review notifications are enabled.
+const channelCapability = "claude/channel"
+
 // metaKeyPattern matches meta keys the client accepts as tag attributes;
 // anything else is silently dropped on the client side.
 var metaKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
