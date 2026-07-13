@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -157,19 +158,17 @@ func Test_GetChangeComments(t *testing.T) {
 	t.Run("threads with resolution state", func(t *testing.T) {
 		t.Parallel()
 
-		cs, lastURL := fakeGerrit(t, fixture)
+		cs := commentsSession(t, fixture, emptyDraftsJSON)
 
 		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
 
 		golden(t, "change-comments-all", out)
-
-		assert.Contains(t, *lastURL, "/a/changes/123/comments")
 	})
 
 	t.Run("unresolved filter drops resolved threads", func(t *testing.T) {
 		t.Parallel()
 
-		cs, _ := fakeGerrit(t, fixture)
+		cs := commentsSession(t, fixture, emptyDraftsJSON)
 
 		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "unresolved"})
 
@@ -179,7 +178,7 @@ func Test_GetChangeComments(t *testing.T) {
 	t.Run("invalid filter is an error", func(t *testing.T) {
 		t.Parallel()
 
-		cs, _ := fakeGerrit(t, fixture)
+		cs := commentsSession(t, fixture, emptyDraftsJSON)
 
 		res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{
 			Name:      "get_change_comments",
@@ -187,5 +186,112 @@ func Test_GetChangeComments(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, res.IsError)
+	})
+
+	t.Run("caller drafts flip thread state", func(t *testing.T) {
+		t.Parallel()
+
+		// Published state: thread resolved by the reply. The caller's
+		// unpublished draft reopens it — the state the change screen shows.
+		const published = ")]}'\n" + `{
+		  "core/scanner.go": [
+		    {"id": "c1", "line": 10, "patch_set": 1, "message": "Is this nil-safe?", "unresolved": true,
+		     "updated": "2026-07-01 10:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}},
+		    {"id": "c2", "in_reply_to": "c1", "line": 10, "patch_set": 1, "message": "Fixed in ps2",
+		     "unresolved": false,
+		     "updated": "2026-07-01 11:00:00.000000000",
+		     "author": {"_account_id": 7, "name": "Alice", "username": "alice"}}
+		  ]
+		}`
+
+		const drafts = ")]}'\n" + `{
+		  "core/scanner.go": [
+		    {"id": "d1", "in_reply_to": "c1", "line": 10, "patch_set": 1,
+		     "message": "Still crashes on empty input", "unresolved": true,
+		     "updated": "2026-07-01 12:00:00.000000000"}
+		  ]
+		}`
+
+		cs := commentsSession(t, published, drafts)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "unresolved"})
+
+		golden(t, "change-comments-drafts", out)
+	})
+
+	t.Run("reply across a rename joins the root's thread", func(t *testing.T) {
+		t.Parallel()
+
+		// A reply lives under the file's new path after a rename; the chain
+		// still forms one thread, rendered under the root's path.
+		const published = ")]}'\n" + `{
+		  "core/new-name.go": [
+		    {"id": "r2", "in_reply_to": "r1", "line": 5, "patch_set": 2, "message": "Done",
+		     "unresolved": false,
+		     "updated": "2026-07-02 10:00:00.000000000",
+		     "author": {"_account_id": 7, "name": "Alice", "username": "alice"}}
+		  ],
+		  "core/old-name.go": [
+		    {"id": "r1", "line": 5, "patch_set": 1, "message": "Rename this too", "unresolved": true,
+		     "updated": "2026-07-01 10:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}}
+		  ]
+		}`
+
+		cs := commentsSession(t, published, emptyDraftsJSON)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+
+		golden(t, "change-comments-renamed", out)
+	})
+
+	t.Run("same-timestamp fork orders by comment id", func(t *testing.T) {
+		t.Parallel()
+
+		// Two parallel replies share a timestamp; Gerrit breaks the tie by
+		// comment id, which decides the thread's resolved state.
+		const published = ")]}'\n" + `{
+		  "core/scanner.go": [
+		    {"id": "c1", "line": 10, "patch_set": 1, "message": "Race here", "unresolved": true,
+		     "updated": "2026-07-01 10:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}},
+		    {"id": "zz", "in_reply_to": "c1", "line": 10, "patch_set": 1, "message": "Not fixed",
+		     "unresolved": true,
+		     "updated": "2026-07-01 11:00:00.000000000",
+		     "author": {"_account_id": 8, "name": "Bob", "username": "bob"}},
+		    {"id": "aa", "in_reply_to": "c1", "line": 10, "patch_set": 1, "message": "Fixed",
+		     "unresolved": false,
+		     "updated": "2026-07-01 11:00:00.000000000",
+		     "author": {"_account_id": 7, "name": "Alice", "username": "alice"}}
+		  ]
+		}`
+
+		cs := commentsSession(t, published, emptyDraftsJSON)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+
+		golden(t, "change-comments-tiebreak", out)
+	})
+}
+
+const emptyDraftsJSON = ")]}'\n{}"
+
+// commentsSession wires a fake Gerrit for the comment flow: self-check plus
+// separate fixtures for the published-comments and drafts endpoints.
+func commentsSession(t *testing.T, commentsFixture, draftsFixture string) *mcp.ClientSession {
+	t.Helper()
+
+	return session(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/a/accounts/self":
+			_, _ = w.Write([]byte(selfJSON))
+		case strings.HasSuffix(r.URL.Path, "/drafts"):
+			_, _ = w.Write([]byte(draftsFixture))
+		case strings.HasSuffix(r.URL.Path, "/comments"):
+			_, _ = w.Write([]byte(commentsFixture))
+		default:
+			_, _ = w.Write([]byte(ownChangeJSON))
+		}
 	})
 }
