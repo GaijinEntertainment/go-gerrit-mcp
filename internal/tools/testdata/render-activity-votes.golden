@@ -1,0 +1,4 @@
+<review_activity change="123" project="core" status="NEW" updated="2026-07-02T11:30:00Z">
+<vote label="Code-Review" value="2" by="Bob (bob)" date="2026-07-02T11:30:00Z"/>
+<vote label="Verified" value="-1" by="CI (ci)" date="2026-07-02T11:29:00Z"/>
+</review_activity>
