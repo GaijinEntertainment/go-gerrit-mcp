@@ -134,12 +134,9 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 
 	errs := missingEnv(cfg)
 
-	ownOnly, err := strconv.ParseBool(strings.TrimSpace(ownChanges.value))
+	ownOnly, err := parseBool(ownChanges)
 	if err != nil {
-		errs = append(errs, errInvalidBool.WithFields(
-			fields.F("flag", ownChanges.name),
-			fields.F("value", ownChanges.value),
-		))
+		errs = append(errs, err)
 	} else {
 		cfg.AllowForeignChanges = !ownOnly
 	}
@@ -204,6 +201,20 @@ func missingEnv(cfg *Config) []error {
 	}
 
 	return errs
+}
+
+// parseBool parses a resolved boolean flag value, naming the flag and the
+// offending value in the error.
+func parseBool(bf behaviorFlag) (bool, error) {
+	v, err := strconv.ParseBool(strings.TrimSpace(bf.value))
+	if err != nil {
+		return false, errInvalidBool.WithFields(
+			fields.F("flag", bf.name),
+			fields.F("value", bf.value),
+		)
+	}
+
+	return v, nil
 }
 
 // splitList splits a comma-separated list, trimming whitespace and dropping
