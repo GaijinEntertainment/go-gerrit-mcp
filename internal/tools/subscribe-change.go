@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"dev.gaijin.team/go/golib/e"
+	"dev.gaijin.team/go/golib/fields"
 	gerrit "github.com/andygrunwald/go-gerrit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -15,6 +16,10 @@ import (
 // ErrAlreadySubscribed reports a subscribe attempt on a change this session
 // already follows.
 var ErrAlreadySubscribed = e.New("change is already subscribed in this session")
+
+// ErrTerminalChange reports a subscribe attempt on a merged or abandoned
+// change, whose subscription would never fire.
+var ErrTerminalChange = e.New("change is in a terminal state; nothing left to notify about")
 
 type subscribeChangeInput struct {
 	Change string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
@@ -38,6 +43,13 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 				info, err := c.GetChange(ctx, in.Change)
 				if err != nil {
 					return nil, nil, err
+				}
+
+				if notifications.IsTerminal(info.Status) {
+					return nil, nil, ErrTerminalChange.WithFields(
+						fields.F("change", info.Number),
+						fields.F("status", info.Status),
+					)
 				}
 
 				if !store.Add(info.Number, notifications.NewCursor(info.Updated.Time, info.Status)) {

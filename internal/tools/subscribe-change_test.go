@@ -169,6 +169,32 @@ func Test_SubscribeChange(t *testing.T) {
 		assert.Empty(t, store.Changes())
 	})
 
+	t.Run("terminal change refused naming the status", func(t *testing.T) {
+		t.Parallel()
+
+		merged := ")]}'\n" + `{"_number":123,"project":"core","status":"MERGED",` +
+			`"updated":"2026-07-02 11:30:00.000000000"}`
+
+		store := notifications.NewStore()
+		cs := subscribeSession(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/a/accounts/self" {
+				_, _ = w.Write([]byte(selfJSON))
+
+				return
+			}
+
+			_, _ = w.Write([]byte(merged))
+		}, store)
+
+		res := callSubscribe(t, cs, "123")
+		require.True(t, res.IsError)
+
+		text := resultText(t, res)
+		assert.Contains(t, text, "terminal state")
+		assert.Contains(t, text, "MERGED")
+		assert.Empty(t, store.Changes())
+	})
+
 	t.Run("out-of-scope change refused", func(t *testing.T) {
 		t.Parallel()
 

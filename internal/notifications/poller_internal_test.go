@@ -43,6 +43,14 @@ func quietDetailJSON(updated string) string {
 	return ")]}'\n" + `{"_number":123,"project":"core","status":"NEW","updated":"` + updated + `"}`
 }
 
+// mergedDetailJSON renders a detailed fetch of change 123 that reached
+// MERGED, carrying the submit message alongside the transition.
+func mergedDetailJSON(updated string) string {
+	return ")]}'\n" + `{"_number":123,"project":"core","status":"MERGED","updated":"` + updated + `",` +
+		`"messages":[{"id":"m1","author":{"_account_id":8,"username":"bob"},"date":"` + updated + `",` +
+		`"message":"Change has been merged","_revision_number":2}]}`
+}
+
 type emitCall struct {
 	content string
 	meta    map[string]string
@@ -323,6 +331,28 @@ func Test_Poller_Tick(t *testing.T) {
 
 		assert.Len(t, f.emitter.recorded(), 1)
 		assert.Contains(t, f.logs.String(), "review notification emit")
+	})
+
+	t.Run("terminal status ends the subscription after one final emission", func(t *testing.T) {
+		t.Parallel()
+
+		f := newTestPoller(t, time.Minute)
+		f.stub.set(queryJSON(movedAt), mergedDetailJSON(movedAt))
+
+		f.poller.store.Add(123, seedCursor(t))
+
+		f.poller.tick(t.Context())
+
+		calls := f.emitter.recorded()
+		require.Len(t, calls, 1)
+		assert.Equal(t, "delta change=123 messages=1 votes=0 comments=0 transition=true", calls[0].content,
+			"same-tick activity must ride in the final notification")
+		assert.Empty(t, f.poller.store.Changes(), "the change must leave the store")
+
+		f.poller.tick(t.Context())
+
+		assert.Len(t, f.emitter.recorded(), 1, "an ended subscription must stay silent")
+		assert.EqualValues(t, 1, f.stub.queries.Load(), "an empty store must stop polling entirely")
 	})
 
 	t.Run("result for an unsubscribed change is ignored", func(t *testing.T) {

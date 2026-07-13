@@ -51,6 +51,12 @@ func (deltaRenderer) Render(d *notifications.Delta) (string, map[string]string) 
 		).String())
 	}
 
+	if notifications.IsTerminal(d.Change.Status) {
+		children = append(children, llmxml.NewElement("subscription", llmxml.Attr("ended", true)).
+			WrapText("The change reached "+d.Change.Status+", so this subscription ended automatically; "+
+				"no further notifications for this change will arrive.").String())
+	}
+
 	content := root.String()
 	if len(children) > 0 {
 		content = root.WrapText(strings.Join(children, "\n")).String()
