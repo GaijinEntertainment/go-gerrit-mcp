@@ -2,7 +2,9 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +20,15 @@ type Emitter interface {
 	Emit(ctx context.Context, content string, meta map[string]string) error
 }
 
-// Renderer composes a delta into the channel payload: llmxml content plus
-// the routing meta. It lives behind an interface because the payload reuses
-// the rendering vocabulary of the tools package, which sits above this one.
+// Renderer composes channel payloads: llmxml content plus the routing meta.
+// It lives behind an interface because payloads reuse the rendering
+// vocabulary of the tools package, which sits above this one.
 type Renderer interface {
+	// Render composes a delta payload.
 	Render(d *Delta) (content string, meta map[string]string)
+	// RenderEnded composes the notice ending a subscription for a reason
+	// other than a terminal status — a change that became inaccessible.
+	RenderEnded(change int, reason string) (content string, meta map[string]string)
 }
 
 // Poller periodically queries Gerrit for movement on subscribed changes and
@@ -97,8 +103,16 @@ func (p *Poller) tick(ctx context.Context) {
 		return
 	}
 
+	seen := make(map[int]bool, len(res.Changes))
+
 	for i := range res.Changes {
+		if ctx.Err() != nil {
+			return
+		}
+
 		ci := &res.Changes[i]
+
+		seen[ci.Number] = true
 
 		cur, ok := p.store.Cursor(ci.Number)
 		if !ok || !ci.Updated.After(cur.Updated) {
@@ -106,6 +120,65 @@ func (p *Poller) tick(ctx context.Context) {
 		}
 
 		p.process(ctx, ci.Number, cur)
+	}
+
+	// A subscribed change the batched query no longer returns was deleted or
+	// hidden from this account — its own change: clause matches nothing.
+	for _, change := range changes {
+		if seen[change] || ctx.Err() != nil {
+			continue
+		}
+
+		p.confirmAccess(ctx, change)
+	}
+}
+
+// confirmAccess double-checks a change missing from the query result with a
+// direct fetch: query staleness must not end a subscription, so only a
+// classified access failure does.
+func (p *Poller) confirmAccess(ctx context.Context, change int) {
+	_, err := p.client.GetChange(ctx, strconv.Itoa(change))
+	if err == nil {
+		return
+	}
+
+	reason, gone := inaccessibleReason(err)
+	if !gone {
+		p.lgr.Error("review notifications access check", "change", change, "error", err)
+
+		return
+	}
+
+	p.endInaccessible(ctx, change, reason)
+}
+
+// endInaccessible ends a subscription whose change this session can no
+// longer read, announcing the reason; silence would read as a quiet change,
+// not a lost one.
+func (p *Poller) endInaccessible(ctx context.Context, change int, reason string) {
+	if !p.store.Remove(change) {
+		return
+	}
+
+	content, meta := p.renderer.RenderEnded(change, reason)
+
+	if err := p.emitter.Emit(ctx, content, meta); err != nil {
+		p.lgr.Error("review notification emit", "change", change, "error", err)
+	}
+}
+
+// inaccessibleReason classifies an error as one that ends a subscription:
+// the change is gone for this session rather than momentarily unreachable.
+func inaccessibleReason(err error) (string, bool) {
+	if errors.Is(err, gerritclient.ErrProjectScope) {
+		return "the change is outside the configured project scope", true
+	}
+
+	switch gerritclient.APIStatus(err) {
+	case http.StatusNotFound, http.StatusForbidden:
+		return "the change was deleted or is no longer visible to this account", true
+	default:
+		return "", false
 	}
 }
 
@@ -117,14 +190,14 @@ func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
 
 	info, err := p.client.GetChange(ctx, id)
 	if err != nil {
-		p.lgr.Error("review notifications detail fetch", "change", change, "error", err)
+		p.fetchFailed(ctx, change, "detail fetch", err)
 
 		return
 	}
 
 	comments, err := p.client.ListChangeComments(ctx, id)
 	if err != nil {
-		p.lgr.Error("review notifications comment fetch", "change", change, "error", err)
+		p.fetchFailed(ctx, change, "comment fetch", err)
 
 		return
 	}
@@ -159,6 +232,19 @@ func (p *Poller) process(ctx context.Context, change int, cur Cursor) {
 	}
 
 	p.emit(ctx, delta)
+}
+
+// fetchFailed routes a mid-process fetch error: a classified access loss
+// ends the subscription with a notice, anything else is logged and the
+// untouched cursor retries the change next tick.
+func (p *Poller) fetchFailed(ctx context.Context, change int, what string, err error) {
+	if reason, gone := inaccessibleReason(err); gone {
+		p.endInaccessible(ctx, change, reason)
+
+		return
+	}
+
+	p.lgr.Error("review notifications "+what, "change", change, "error", err)
 }
 
 func (p *Poller) emit(ctx context.Context, d *Delta) {

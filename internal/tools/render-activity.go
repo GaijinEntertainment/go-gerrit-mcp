@@ -65,6 +65,19 @@ func (deltaRenderer) Render(d *notifications.Delta) (string, map[string]string) 
 	return content, deltaMeta(d)
 }
 
+// RenderEnded implements the notice for a subscription ending on lost
+// access: unlike a terminal transition there is no fetched change to
+// compose from, only the number and the reason.
+func (deltaRenderer) RenderEnded(change int, reason string) (string, map[string]string) {
+	content := llmxml.NewElement("review_activity", llmxml.Attr("change", change)).
+		WrapText(llmxml.NewElement("subscription", llmxml.Attr("ended", true)).
+			WrapText("This subscription ended automatically: " + reason + ". " +
+				"No further notifications for this change will arrive.").String()).
+		String()
+
+	return content, map[string]string{"change": strconv.Itoa(change), "kind": "ended"}
+}
+
 // renderActivityMessage mirrors the message element of get_change, extended
 // with the tag Gerrit attaches to generated messages.
 func renderActivityMessage(msg gerrit.ChangeMessageInfo) string {
