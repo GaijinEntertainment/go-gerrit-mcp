@@ -177,7 +177,8 @@ and enabled groups union.
 - `get_change` — one change in review-relevant detail: status, owner, labels with votes, current revision, messages.
 - `list_change_files` — files touched by a revision, with per-file change stats.
 - `get_file_diff` — the diff of one file in a revision.
-- `get_change_comments` — comment threads on a change, with resolution state and comment ids.
+- `get_change_comments` — comment threads on a change, with resolution state and comment ids. Returns unresolved
+  threads only by default; `status=all` fetches the full history, `status=resolved` the settled threads.
 - `post_comments` — publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments; replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote` — set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.

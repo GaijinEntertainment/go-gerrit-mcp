@@ -26,7 +26,7 @@ var errInvalidStatus = e.New("invalid status filter, expected all, resolved, or 
 
 type getChangeCommentsInput struct {
 	Change string `json:"change" jsonschema:"Change identifier: change number (123), project~number (myproject~123), or Change-Id (I8473b95...)"`
-	Status string `json:"status,omitempty" jsonschema:"Thread filter: all, resolved, or unresolved; default all"`
+	Status string `json:"status,omitempty" jsonschema:"Thread filter: all, resolved, or unresolved; default unresolved"`
 }
 
 func getChangeComments(c *gerritclient.Client) Tool {
@@ -38,16 +38,22 @@ func getChangeComments(c *gerritclient.Client) Tool {
 				Description: "List a Gerrit change's inline review comments — the code discussion " +
 					"anchored to files and lines, distinct from the change messages get_change " +
 					"shows — grouped by file and reconstructed into threads with their resolved " +
-					"state. The calling account's unpublished draft comments are included, marked " +
-					"draft=\"true\" and invisible to anyone else; thread state accounts for them, " +
-					"matching what this account's Gerrit UI shows. Unresolved threads render " +
-					"before resolved ones; threads follow their latest activity and comments " +
-					"their history. Comment ids are the reply anchors for post_comments; filter " +
-					"status=unresolved to see what still needs action.",
+					"state. By default only unresolved threads return: the discussion still " +
+					"needing action. status=all adds the settled history — on long reviews that " +
+					"can be very large, so reach for it only when the resolved context matters; " +
+					"status=resolved lists the settled threads alone. The calling account's " +
+					"unpublished draft comments are included, marked draft=\"true\" and invisible " +
+					"to anyone else; thread state accounts for them, matching what this account's " +
+					"Gerrit UI shows. Unresolved threads render before resolved ones; threads " +
+					"follow their latest activity and comments their history. Comment ids are the " +
+					"reply anchors for post_comments.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in getChangeCommentsInput,
 			) (*mcp.CallToolResult, any, error) {
+				// Unresolved is the default: it is the actionable subset, and
+				// the full history of a long review can dwarf the context it
+				// lands in.
 				if in.Status == "" {
-					in.Status = statusAll
+					in.Status = statusUnresolved
 				}
 
 				if in.Status != statusAll && in.Status != statusResolved && in.Status != statusUnresolved {
