@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "team.gaijin/go-gerrit-mcp",
   "title": "Gerrit Code Review",
-  "description": "Capability-gated MCP tools for Gerrit code review: search, read diffs, comment, vote, transition, and opt-in review notifications pushed into the session",
+  "description": "Capability-gated Gerrit code review tools with opt-in review notifications pushed into the session",
   "version": "0.0.0",
   "repository": {
     "url": "https://github.com/GaijinEntertainment/go-gerrit-mcp",
