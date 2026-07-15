@@ -1,6 +1,6 @@
 module dev.gaijin.team/go/go-gerrit-mcp
 
-go 1.26.5
+go 1.25.0
 
 require (
 	dev.gaijin.team/go/golib v0.8.1
