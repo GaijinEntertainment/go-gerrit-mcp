@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "team.gaijin/go-gerrit-mcp",
   "title": "Gerrit Code Review",
-  "description": "Capability-gated MCP tools for Gerrit code review: search, read diffs, comment, vote, transition",
+  "description": "Capability-gated MCP tools for Gerrit code review: search, read diffs, comment, vote, transition, and opt-in review notifications pushed into the session",
   "version": "0.0.0",
   "repository": {
     "url": "https://github.com/GaijinEntertainment/go-gerrit-mcp",
@@ -47,6 +47,31 @@
           "description": "Refuse trail-leaving operations on changes not owned by the authenticated account",
           "format": "boolean",
           "default": "true"
+        },
+        {
+          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS",
+          "description": "Enable review notifications: poll Gerrit for activity on subscribed changes and push it into the agent's session (requires a client with channel support)",
+          "format": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL",
+          "description": "Poll cadence for subscribed changes, as a Go duration",
+          "default": "60s"
+        },
+        {
+          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN",
+          "description": "Keep the authenticated account's own activity in review notifications",
+          "format": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS",
+          "description": "Comma-separated usernames or numeric account IDs whose activity never becomes a review notification"
+        },
+        {
+          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS",
+          "description": "Comma-separated regular expressions; matching message or comment text never becomes a review notification"
         }
       ]
     }
