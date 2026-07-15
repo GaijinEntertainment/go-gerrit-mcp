@@ -9,6 +9,10 @@ on:
       tag:
         description: "Released tag to publish (e.g. v1.1.0)"
         required: true
+      verify_only:
+        description: "Stop after the DNS ownership verification, publish nothing"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -49,9 +53,13 @@ jobs:
         run: |
           curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
             | tar xz mcp-publisher
-      - name: Publish to the MCP registry
+      - name: Verify domain ownership
+        # login performs the full DNS proof: it signs a challenge with the
+        # private key and the registry checks it against the TXT record, so
+        # a verify_only dispatch exercises everything short of publishing.
         env:
           MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
-        run: |
-          ./mcp-publisher login dns --domain=gaijin.team --private-key="$MCP_PRIVATE_KEY"
-          ./mcp-publisher publish
+        run: ./mcp-publisher login dns --domain=gaijin.team --private-key="$MCP_PRIVATE_KEY"
+      - name: Publish to the MCP registry
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.verify_only) }}
+        run: ./mcp-publisher publish
