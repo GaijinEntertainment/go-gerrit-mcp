@@ -1,0 +1,57 @@
+name: Registry
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Released tag to publish (e.g. v1.1.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    # Publishes the released version to the MCP registry. It runs after the
+    # Release workflow so the OCI image the entry references already exists
+    # when the registry validates it; the manual dispatch covers tags
+    # released before this workflow existed. The signing key lives in the
+    # mcp-registry environment, admitted from main only — and workflow_run
+    # always executes the default branch's workflow file, so a PR branch can
+    # neither alter this job nor reach the secret.
+    if: >-
+      github.repository == 'GaijinEntertainment/go-gerrit-mcp' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        startsWith(github.event.workflow_run.head_branch, 'v')))
+    runs-on: ubuntu-latest
+    environment: mcp-registry
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Stamp server.json with the released version
+        run: |
+          version="${TAG#v}"
+          jq --arg v "$version" '
+            .version = $v
+            | .packages[0].identifier = "ghcr.io/gaijinentertainment/go-gerrit-mcp:" + $v
+          ' server.json > server.json.stamped
+          mv server.json.stamped server.json
+      - name: Install mcp-publisher
+        # Unpinned on purpose: the publisher tracks the live registry API,
+        # and an old pinned binary is likelier to break than a fresh one.
+        run: |
+          curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz mcp-publisher
+      - name: Publish to the MCP registry
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: |
+          ./mcp-publisher login dns --domain=gaijin.team --private-key="$MCP_PRIVATE_KEY"
+          ./mcp-publisher publish
