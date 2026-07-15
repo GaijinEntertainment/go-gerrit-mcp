@@ -20,7 +20,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          # Pinned to the newest CI-tested line rather than go.mod: the
+          # directive there is the compatibility floor, not the toolchain
+          # official binaries should be built with.
+          go-version: "1.26"
           # Release builds are hermetic: the Actions cache is writable from
           # any PR branch, so restoring it here would let a poisoned cache
           # entry reach the publishing build.
