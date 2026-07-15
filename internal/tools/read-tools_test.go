@@ -160,9 +160,20 @@ func Test_GetChangeComments(t *testing.T) {
 
 		cs := commentsSession(t, fixture, emptyDraftsJSON)
 
-		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "all"})
 
 		golden(t, "change-comments-all", out)
+	})
+
+	t.Run("default returns only unresolved threads", func(t *testing.T) {
+		t.Parallel()
+
+		cs := commentsSession(t, fixture, emptyDraftsJSON)
+
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+
+		// Same golden as the explicit filter: the default IS unresolved.
+		golden(t, "change-comments-unresolved", out)
 	})
 
 	t.Run("unresolved filter drops resolved threads", func(t *testing.T) {
@@ -241,7 +252,7 @@ func Test_GetChangeComments(t *testing.T) {
 
 		cs := commentsSession(t, published, emptyDraftsJSON)
 
-		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "all"})
 
 		golden(t, "change-comments-renamed", out)
 	})
@@ -273,7 +284,7 @@ func Test_GetChangeComments(t *testing.T) {
 
 		cs := commentsSession(t, published, emptyDraftsJSON)
 
-		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "all"})
 
 		golden(t, "change-comments-ui-fork", out)
 	})
@@ -301,7 +312,7 @@ func Test_GetChangeComments(t *testing.T) {
 
 		cs := commentsSession(t, published, emptyDraftsJSON)
 
-		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "all"})
 
 		golden(t, "change-comments-latest-order", out)
 	})
@@ -329,7 +340,7 @@ func Test_GetChangeComments(t *testing.T) {
 
 		cs := commentsSession(t, published, emptyDraftsJSON)
 
-		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123"})
+		out := callTool(t, cs, "get_change_comments", map[string]any{"change": "123", "status": "all"})
 
 		golden(t, "change-comments-tiebreak", out)
 	})
