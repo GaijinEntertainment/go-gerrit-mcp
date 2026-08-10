@@ -160,6 +160,11 @@ func assemble(
 // SDK's tools inference but drops its logging default, so Logging is
 // declared explicitly to keep parity with the disabled path (pinned by
 // Test_Learning_CapabilitiesOverride).
+//
+// SEP-2577 deprecates logging as of protocol version 2026-07-28, yet the SDK
+// keeps declaring it for a nil Capabilities, so parity still needs the
+// explicit declaration. Drop it — and the assertions that pin it — once the
+// SDK drops its own default.
 func serverOptions(cfg *config.Config) *mcp.ServerOptions {
 	opts := &mcp.ServerOptions{Instructions: instructions}
 
@@ -167,7 +172,7 @@ func serverOptions(cfg *config.Config) *mcp.ServerOptions {
 		opts.Instructions += notificationsInstructions
 
 		opts.Capabilities = &mcp.ServerCapabilities{
-			Logging:      &mcp.LoggingCapabilities{},
+			Logging:      &mcp.LoggingCapabilities{}, //nolint:staticcheck // deprecated, kept for parity — see above
 			Experimental: map[string]any{channelCapability: map[string]any{}},
 		}
 	}

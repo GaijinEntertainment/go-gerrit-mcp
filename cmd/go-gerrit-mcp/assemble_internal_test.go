@@ -113,6 +113,7 @@ func Test_Assemble_Disabled(t *testing.T) {
 
 	caps := init.Capabilities
 	require.NotNil(t, caps)
+	//nolint:staticcheck // logging is deprecated (SEP-2577); the SDK still declares it by default
 	assert.NotNil(t, caps.Logging, "zero-config keeps the SDK logging default")
 	assert.NotNil(t, caps.Tools)
 	assert.Empty(t, caps.Experimental, "zero-config declares no experimental capability")
@@ -142,6 +143,7 @@ func Test_Assemble_Enabled(t *testing.T) {
 	caps := init.Capabilities
 	require.NotNil(t, caps)
 	assert.Contains(t, caps.Experimental, channelCapability)
+	//nolint:staticcheck // logging is deprecated (SEP-2577); serverOptions still declares it for parity
 	assert.NotNil(t, caps.Logging, "logging capability must survive the override")
 	assert.NotNil(t, caps.Tools, "tools capability must survive the override")
 
