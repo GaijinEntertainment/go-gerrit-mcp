@@ -25,7 +25,8 @@ const channelMethod = "notifications/claude/channel"
 // If an upgrade breaks the tools half, the conditional capability wiring must
 // set Tools explicitly; the logging half means the wiring must always set
 // Logging alongside Experimental to keep capability parity with the disabled
-// path.
+// path. SEP-2577 deprecates logging as of protocol version 2026-07-28, so the
+// logging half holds only until the SDK drops the default itself.
 func Test_Learning_CapabilitiesOverride(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +56,7 @@ func Test_Learning_CapabilitiesOverride(t *testing.T) {
 
 	assert.NotNil(t, caps.Tools, "tools capability must survive the Experimental override")
 	assert.Contains(t, caps.Experimental, "claude/channel")
+	//nolint:staticcheck // logging is deprecated (SEP-2577); the pinned default outlives the deprecation
 	assert.Nil(t, caps.Logging, "overriding Capabilities drops the logging default — declare it explicitly")
 }
 
