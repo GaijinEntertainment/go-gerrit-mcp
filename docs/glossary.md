@@ -82,9 +82,9 @@ deliberately emits text for model consumption, not machine-parseable payloads).
 ### Review notifications
 
 The feature (dedicated flag family, disabled by default) that polls Gerrit for activity on subscribed changes and
-sends filtered server notifications. A client must handle the notifications to show them in the agent's session.
-Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it is not a capability group, because it is client-side
-mechanics, not a Gerrit operation class.
+sends filtered server notifications. A client must send the notifications to the model for the agent to act on them;
+displaying them to the operator is not model delivery. Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it
+is not a capability group, because it is client-side mechanics, not a Gerrit operation class.
 **Avoid:** notification group / notification capability (implies a fourth capability group — groups partition Gerrit
 operations by trail impact, this partitions nothing); watch feature / watcher (collides with Gerrit's server-side
 watched-projects setting, which this is not).
@@ -112,5 +112,5 @@ decides how to show or use the activity. The server also sends a Claude Code cha
 The Claude Code channels contract this server implements alongside the review activity notification:
 `claude/channel` at initialize and `notifications/claude/channel` events. A compatible client injects the payload
 into the model's session as a `<channel>` block.
-**Avoid:** a name for the client-neutral notification; chat channel (the event carries review activity into the
-session, not conversation out of it).
+**Avoid:** review activity notification (a separate client-neutral method); chat channel (the event carries review
+activity into the session, not conversation out of it).

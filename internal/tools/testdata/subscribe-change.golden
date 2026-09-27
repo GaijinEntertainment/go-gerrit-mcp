@@ -1,1 +1,1 @@
-<subscribed change="123" project="core" status="NEW" patch_set="3">Subscription registered. Clients that handle server notifications receive new review activity.</subscribed>
+<subscribed change="123" project="core" status="NEW" patch_set="3">Subscription registered. If your client sends review_activity into this conversation, activity that passes the filters arrives automatically. Use the read tools to check an awaited outcome that did not arrive, or to check updates if your client does not send review_activity.</subscribed>

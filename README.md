@@ -188,12 +188,12 @@ own, and enabled groups union.
 
 ## Review notifications
 
-An opt-in server notification for review activity. The agent subscribes to a change with `subscribe_change`; a
-client that handles review notifications then receives new change messages, votes, inline comment threads, and
-status transitions as `review_activity` blocks. The payload uses the same llmxml vocabulary as the read tools and
-contains the activity in full. `unsubscribe_change` ends a subscription early. A merged or abandoned change ends
-its subscription with a final notification, as does a change that becomes unreadable (deleted or no longer visible
-to the account).
+An opt-in server notification for review activity. The agent subscribes to a change with `subscribe_change`; the
+server then sends new change messages, votes, inline comment threads, and status transitions as `review_activity`
+blocks to the MCP client. A client must send these blocks to the model for the agent to act on them. The payload
+uses the same llmxml vocabulary as the read tools and contains the activity in full. `unsubscribe_change` ends a
+subscription early. A merged or abandoned change ends its subscription with a final notification, as does a
+change that becomes unreadable (deleted or no longer visible to the account).
 
 Subscriptions are per-session and in-memory: they leave no trace on the Gerrit instance, end with the session, and
 after a server restart the agent subscribes again. With the feature off (the default) the server is byte-identical
@@ -206,15 +206,19 @@ Enabling takes both sides:
    subscribed changes, with detail fetches only for changes that moved.
 2. Client: handle `notifications/gerrit/review_activity` on the same MCP connection that calls `subscribe_change`.
    The server advertises `capabilities.experimental["gerrit/review_activity"]` and sends an ID-less JSON-RPC
-   notification with `params.content` (the full llmxml block) and `params.meta` (`change`, `project`, and `kind`
-   when available). The client decides whether to display the activity or add it to the agent's session.
+   notification with `params.content` (the full llmxml block) and `params.meta`. The `change` and `kind` fields
+   are always present. For a change update, `project` is present and `kind` is a comma-separated list of
+   `message`, `vote`, `comment`, or `transition`. A notice that ends a subscription because the change is no
+   longer accessible has `kind=ended` and no `project`. The client can show the activity to the operator, send it
+   into the model's session, or both. A UI-only handler does not notify the model.
 
 For Claude Code, the server also advertises `claude/channel` and sends the same content and metadata through
 `notifications/claude/channel`. A plain `mcpServers` registration needs
 `claude --dangerously-load-development-channels server:<name>` (Claude Code 2.1.80 or newer); allowlisted channel
 plugins load with `claude --channels`. Claude Code channels are a research preview: organization policy can disable
 them, and the flag syntax can change. A client that handles both methods must use only one to avoid duplicate
-activity. A client that handles neither receives no review activity; use the read tools to check for updates.
+activity. If a client does not send review activity into the model's session, use the read tools to check for
+updates.
 
 Noise control is operator configuration. The server applies no heuristics of its own and filters nothing by message
 tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
@@ -223,6 +227,8 @@ tag, because a bot's verdict is often exactly the outcome the agent is waiting f
 - `--review-notifications-exclude-accounts` silences accounts by username or numeric ID;
 - `--review-notifications-exclude-patterns` drops events whose message or comment text matches a regular
   expression; an invalid pattern fails startup with an error naming it.
+
+A filter can omit an awaited outcome. Use the read tools to confirm its state when a notification does not arrive.
 
 Every flag has a `GERRIT_MCP_*` mirror that follows the same settings layering as the rest of the configuration
 (see [Per-project configuration](#per-project-configuration-in-claude-code)), so a project can enable notifications

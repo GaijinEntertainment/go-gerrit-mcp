@@ -34,13 +34,16 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameSubscribeChange,
-				Description: "Subscribe this session to a Gerrit change. Call when your client handles " +
-					"server notifications and a review outcome is pending. The client receives new " +
-					"messages, votes, comment threads, and status transitions in full. If the client " +
-					"does not handle notifications, use the read tools to check for updates. A " +
-					"merged or abandoned change ends the subscription with a final notification; " +
-					"a change already in that state cannot be subscribed. Subscriptions are in-memory " +
-					"and per-session; subscribe again after a server restart.",
+				Description: "Subscribe this session to a Gerrit change when your client sends " +
+					"review_activity into this conversation. Call after pushing a change for review or " +
+					"while waiting for an approval, CI verdict, or reviewer reply. New messages, votes, " +
+					"comment threads, and status transitions arrive in full when filters allow them. " +
+					"Wait for notifications instead of polling. Use the read tools to confirm an outcome " +
+					"when you need its state and no notification arrives for it. If the client does not " +
+					"send review_activity into this conversation, use the read tools instead. A merged or " +
+					"abandoned change ends the subscription with a final notification; a change " +
+					"already in that state cannot be subscribed. " +
+					"Subscriptions are in-memory and per-session; subscribe again after a server restart.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in subscribeChangeInput,
 			) (*mcp.CallToolResult, any, error) {
 				info, err := c.GetChange(ctx, in.Change)
@@ -78,7 +81,9 @@ func renderSubscribed(ci *gerrit.ChangeInfo) string {
 		el.Attr(llmxml.Attr("patch_set", rev.Number))
 	}
 
-	el.InlineText("Subscription registered. Clients that handle server notifications receive new review activity.")
+	el.InlineText("Subscription registered. If your client sends review_activity into this conversation, " +
+		"activity that passes the filters arrives automatically. Use the read tools to check an awaited " +
+		"outcome that did not arrive, or to check updates if your client does not send review_activity.")
 
 	return el.String()
 }

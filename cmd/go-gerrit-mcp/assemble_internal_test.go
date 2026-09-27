@@ -142,7 +142,7 @@ func Test_Assemble_Enabled(t *testing.T) {
 
 	caps := init.Capabilities
 	require.NotNil(t, caps)
-	assert.Contains(t, caps.Experimental, channelCapability)
+	assert.Contains(t, caps.Experimental, "claude/channel")
 	assert.Contains(t, caps.Experimental, "gerrit/review_activity")
 	//nolint:staticcheck // logging is deprecated (SEP-2577); serverOptions still declares it for parity
 	assert.NotNil(t, caps.Logging, "logging capability must survive the override")
@@ -246,7 +246,7 @@ func Test_Assemble_TracerBullet(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, map[string]bool{channelMethod: true, neutralMethod: true}, received)
+	assert.Equal(t, map[string]bool{expectedChannelMethod: true, neutralMethod: true}, received)
 }
 
 func discardLogger() *slog.Logger {

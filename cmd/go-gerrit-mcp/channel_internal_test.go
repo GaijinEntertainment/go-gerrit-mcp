@@ -18,6 +18,7 @@ import (
 )
 
 const receiveDeadline = 10 * time.Second
+const expectedChannelMethod = "notifications/claude/channel"
 const neutralMethod = "notifications/gerrit/review_activity"
 
 type observedTransport struct {
@@ -55,14 +56,14 @@ func (c *observedConn) Read(ctx context.Context) (jsonrpc.Message, error) {
 	return msg, nil
 }
 
-type channelFixture struct {
+type reviewFixture struct {
 	emitter       *reviewEmitter
 	session       *mcp.ClientSession
 	notifications chan *jsonrpc.Request
 	logs          *bytes.Buffer
 }
 
-func newChannelFixture(t *testing.T) *channelFixture {
+func newReviewFixture(t *testing.T) *reviewFixture {
 	t.Helper()
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
@@ -97,7 +98,7 @@ func newChannelFixture(t *testing.T) *channelFixture {
 
 	logs := &bytes.Buffer{}
 
-	return &channelFixture{
+	return &reviewFixture{
 		emitter:       &reviewEmitter{transport: capture, lgr: slog.New(slog.NewTextHandler(logs, nil))},
 		session:       session,
 		notifications: observed.notifications,
@@ -105,7 +106,7 @@ func newChannelFixture(t *testing.T) *channelFixture {
 	}
 }
 
-func (f *channelFixture) receive(t *testing.T) *jsonrpc.Request {
+func (f *reviewFixture) receive(t *testing.T) *jsonrpc.Request {
 	t.Helper()
 
 	select {
@@ -124,7 +125,7 @@ func Test_ReviewEmitter_Emit(t *testing.T) {
 	t.Run("notification reaches the client with method and params intact", func(t *testing.T) {
 		t.Parallel()
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		content := `<review_activity change="123" status="NEW"/>`
 		require.NoError(t, f.emitter.Emit(t.Context(), content, map[string]string{"change": "123"}))
@@ -144,7 +145,7 @@ func Test_ReviewEmitter_Emit(t *testing.T) {
 			received[req.Method] = true
 		}
 
-		assert.Equal(t, map[string]bool{channelMethod: true, neutralMethod: true}, received)
+		assert.Equal(t, map[string]bool{expectedChannelMethod: true, neutralMethod: true}, received)
 	})
 
 	t.Run("emissions survive concurrent tool traffic", func(t *testing.T) {
@@ -152,7 +153,7 @@ func Test_ReviewEmitter_Emit(t *testing.T) {
 
 		const emissions = 20
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		var wg sync.WaitGroup
 
@@ -188,13 +189,13 @@ func Test_ReviewEmitter_Emit(t *testing.T) {
 			counts[f.receive(t).Method]++
 		}
 
-		assert.Equal(t, map[string]int{channelMethod: emissions, neutralMethod: emissions}, counts)
+		assert.Equal(t, map[string]int{expectedChannelMethod: emissions, neutralMethod: emissions}, counts)
 	})
 
 	t.Run("invalid meta keys dropped and named", func(t *testing.T) {
 		t.Parallel()
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		meta := map[string]string{"change": "123", "bad-key": "x", "worse key": "y"}
 		require.NoError(t, f.emitter.Emit(t.Context(), "content", meta))

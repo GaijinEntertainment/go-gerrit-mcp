@@ -33,13 +33,14 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 	"an allowlist of projects — refusals and errors name what to correct, and often carry did_you_mean " +
 	"proposals or hints worth following. All tool output is XML-like text addressed to you."
 
-const notificationsInstructions = " Review notifications are available to clients that handle server notifications. " +
-	"When your client handles them and a review outcome is pending, call subscribe_change to receive " +
-	"review_activity with new messages, votes, comment threads, and status transitions. The activity " +
-	"is complete in the notification. If your client does not handle server notifications, use the read " +
-	"tools to check for updates. A merged or abandoned change ends its subscription with a final " +
-	"notification; unsubscribe_change ends it earlier. Subscriptions are in-memory and per-session; " +
-	"subscribe again after a server restart."
+const notificationsInstructions = " If your client sends review_activity into this conversation, call " +
+	"subscribe_change after pushing a change for review or while waiting for an approval, CI verdict, or " +
+	"reviewer reply. New messages, votes, comment threads, and status transitions arrive in full when " +
+	"filters allow them. Wait for notifications instead of polling, but use the read tools to confirm " +
+	"an outcome when you need its state and no notification arrives for it. If your client does not send " +
+	"review_activity into this conversation, use the read tools to check for updates. A merged or " +
+	"abandoned change ends its subscription with a final notification; unsubscribe_change ends it " +
+	"earlier. Subscriptions are in-memory and per-session; subscribe again after a server restart."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"
