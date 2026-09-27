@@ -82,8 +82,9 @@ deliberately emits text for model consumption, not machine-parseable payloads).
 ### Review notifications
 
 The feature (dedicated flag family, disabled by default) that polls Gerrit for activity on subscribed changes and
-pushes filtered events into the agent's session. Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it is
-deliberately not a capability group, because it is client-side mechanics, not a Gerrit operation class.
+sends filtered server notifications. A client must handle the notifications to show them in the agent's session.
+Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it is not a capability group, because it is client-side
+mechanics, not a Gerrit operation class.
 **Avoid:** notification group / notification capability (implies a fourth capability group — groups partition Gerrit
 operations by trail impact, this partitions nothing); watch feature / watcher (collides with Gerrit's server-side
 watched-projects setting, which this is not).
@@ -98,11 +99,18 @@ automatically.
 local state the server holds for one session); star (Gerrit's starred-changes mechanism, also server-side account
 state).
 
+### Review activity notification
+
+The client-neutral MCP server notification sent as `notifications/gerrit/review_activity` when review notifications
+are enabled. The `gerrit/review_activity` experimental capability identifies this contract. Its `content` is the
+complete llmxml activity block and its `meta` carries the routing fields available for that activity. The client
+decides how to show or use the activity. The server also sends a Claude Code channel notification for compatibility.
+**Avoid:** MCP logging notification (`notifications/message` carries logs, not review activity).
+
 ### Channel
 
-The Claude Code channels contract this server implements when review notifications are enabled: the
-`claude/channel` experimental capability declared at initialize, plus `notifications/claude/channel` events whose
-payload the client injects into the model's session as a `<channel>` block.
-**Avoid:** notification channel in the MCP-logging sense (`notifications/message` is a different mechanism that does
-not reach the model); chat channel (channels here carry review activity into the session, not conversation out of
-it).
+The Claude Code channels contract this server implements alongside the review activity notification:
+`claude/channel` at initialize and `notifications/claude/channel` events. A compatible client injects the payload
+into the model's session as a `<channel>` block.
+**Avoid:** a name for the client-neutral notification; chat channel (the event carries review activity into the
+session, not conversation out of it).

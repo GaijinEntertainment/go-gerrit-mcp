@@ -34,16 +34,13 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameSubscribeChange,
-				Description: "Subscribe this session to a Gerrit change. Call it right after pushing " +
-					"a change for review, or when a review outcome you depend on is pending — an " +
-					"approval, a CI verdict, a reviewer's reply. New activity then arrives in the " +
-					"session by itself: change messages, votes, inline comment threads, and status " +
-					"transitions, carried whole — never poll the read tools for a subscribed " +
-					"change. When the change is merged or abandoned, a final notification announces " +
-					"it and the subscription ends automatically; subscribing to a change already in " +
-					"such a state is refused. The subscription is per-session and in-memory: it " +
-					"leaves no trace on Gerrit, ends with the session, and after a server restart " +
-					"you must subscribe again.",
+				Description: "Subscribe this session to a Gerrit change. Call when your client handles " +
+					"server notifications and a review outcome is pending. The client receives new " +
+					"messages, votes, comment threads, and status transitions in full. If the client " +
+					"does not handle notifications, use the read tools to check for updates. A " +
+					"merged or abandoned change ends the subscription with a final notification; " +
+					"a change already in that state cannot be subscribed. Subscriptions are in-memory " +
+					"and per-session; subscribe again after a server restart.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in subscribeChangeInput,
 			) (*mcp.CallToolResult, any, error) {
 				info, err := c.GetChange(ctx, in.Change)
@@ -81,7 +78,7 @@ func renderSubscribed(ci *gerrit.ChangeInfo) string {
 		el.Attr(llmxml.Attr("patch_set", rev.Number))
 	}
 
-	el.InlineText("Review activity on this change now arrives in this session automatically.")
+	el.InlineText("Subscription registered. Clients that handle server notifications receive new review activity.")
 
 	return el.String()
 }

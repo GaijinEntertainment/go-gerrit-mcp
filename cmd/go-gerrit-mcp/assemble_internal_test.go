@@ -143,6 +143,7 @@ func Test_Assemble_Enabled(t *testing.T) {
 	caps := init.Capabilities
 	require.NotNil(t, caps)
 	assert.Contains(t, caps.Experimental, channelCapability)
+	assert.Contains(t, caps.Experimental, "gerrit/review_activity")
 	//nolint:staticcheck // logging is deprecated (SEP-2577); serverOptions still declares it for parity
 	assert.NotNil(t, caps.Logging, "logging capability must survive the override")
 	assert.NotNil(t, caps.Tools, "tools capability must survive the override")
@@ -151,9 +152,7 @@ func Test_Assemble_Enabled(t *testing.T) {
 		append(readGroupTools(), "subscribe_change", "unsubscribe_change"), toolNames(t, session))
 }
 
-// Test_Assemble_TracerBullet drives the whole enabled stack in-process:
-// subscribe through the tool, move the change on the stub Gerrit, receive
-// the channel notification pushed by the poller.
+// Test_Assemble_TracerBullet checks both review-activity methods after a subscription and a Gerrit update.
 func Test_Assemble_TracerBullet(t *testing.T) {
 	t.Parallel()
 
@@ -229,20 +228,25 @@ func Test_Assemble_TracerBullet(t *testing.T) {
 
 	moved.Store(true)
 
-	select {
-	case req := <-observed.notifications:
-		assert.Equal(t, channelMethod, req.Method)
+	received := make(map[string]bool, 2)
+	for range 2 {
+		select {
+		case req := <-observed.notifications:
+			var params reviewParams
 
-		var params channelParams
+			require.NoError(t, json.Unmarshal(req.Params, &params))
+			assert.Contains(t, params.Content, `<review_activity change="123"`)
+			assert.Contains(t, params.Content, "ping", "the payload carries the activity itself")
+			assert.Equal(t, map[string]string{"change": "123", "project": "core", "kind": "message"}, params.Meta)
 
-		require.NoError(t, json.Unmarshal(req.Params, &params))
-		assert.Contains(t, params.Content, `<review_activity change="123"`)
-		assert.Contains(t, params.Content, "ping", "the payload carries the activity itself")
-		assert.Equal(t, map[string]string{"change": "123", "project": "core", "kind": "message"}, params.Meta)
+			received[req.Method] = true
 
-	case <-time.After(receiveTimeout):
-		t.Fatal("no channel notification before timeout")
+		case <-time.After(receiveTimeout):
+			t.Fatal("no review notification before timeout")
+		}
 	}
+
+	assert.Equal(t, map[string]bool{channelMethod: true, neutralMethod: true}, received)
 }
 
 func discardLogger() *slog.Logger {
