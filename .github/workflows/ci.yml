@@ -78,9 +78,10 @@ jobs:
           [[ "$code" -ne 0 ]] || { echo "image must exit non-zero without env" >&2; exit 1; }
           grep -q GERRIT_URL <<<"$out" || { echo "error must name the missing env var" >&2; exit 1; }
 
-  # ci-ok is the single branch-protection gate: it fails when any job of the
-  # run failed or was cancelled, and passes when every triggered job passed
-  # or was skipped — so conditional jobs never need enumerating in rulesets.
+  # ci-ok is the single branch-protection gate: it passes only when every job
+  # of the run passed or was skipped — so conditional jobs never need
+  # enumerating in rulesets. Any other result fails it, including "abandoned",
+  # which GitHub gives a job that got no runner.
   ci-ok:
     if: always()
     needs: [lint, test, release-dry-run]
@@ -91,4 +92,4 @@ jobs:
           RESULTS: ${{ toJSON(needs.*.result) }}
         run: |
           echo "$RESULTS"
-          [[ "$RESULTS" != *'"failure"'* && "$RESULTS" != *'"cancelled"'* ]]
+          jq --exit-status 'all(. == "success" or . == "skipped")' <<< "$RESULTS"
