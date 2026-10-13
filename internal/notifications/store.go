@@ -1,7 +1,6 @@
-// Package notifications implements the review-notifications feature:
-// per-session subscriptions to Gerrit changes and a poller that detects
-// activity on them and pushes it into the agent's session (see
-// docs/glossary.md: Review notifications, Subscription, Channel).
+// Package notifications manages per-session subscriptions to Gerrit changes
+// and polls them for review activity. The client chooses how to use each
+// notification (see docs/glossary.md: Review notifications, Subscription).
 package notifications
 
 import (

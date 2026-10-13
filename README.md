@@ -188,12 +188,12 @@ own, and enabled groups union.
 
 ## Review notifications
 
-An opt-in push channel for review activity. The agent subscribes to a change with `subscribe_change`; from then on,
-new change messages, votes, inline comment threads, and status transitions arrive in the session on their own as
-`review_activity` blocks. The payload uses the same llmxml vocabulary the read tools emit and carries the activity
-whole, so nothing needs fetching afterwards. `unsubscribe_change` ends a subscription early. A merged or abandoned
-change ends its own subscription with a final notification that says so, and a change that becomes unreadable
-(deleted, or no longer visible to the account) does the same, with the reason spelled out.
+An opt-in server notification for review activity. The agent subscribes to a change with `subscribe_change`; the
+server then sends new change messages, votes, inline comment threads, and status transitions as `review_activity`
+blocks to the MCP client. A client must send these blocks to the model for the agent to act on them. The payload
+uses the same llmxml vocabulary as the read tools and contains the activity in full. `unsubscribe_change` ends a
+subscription early. A merged or abandoned change ends its subscription with a final notification, as does a
+change that becomes unreadable (deleted or no longer visible to the account).
 
 Subscriptions are per-session and in-memory: they leave no trace on the Gerrit instance, end with the session, and
 after a server restart the agent subscribes again. With the feature off (the default) the server is byte-identical
@@ -201,18 +201,24 @@ to its pre-feature self, with no extra tools or capabilities and no background p
 
 Enabling takes both sides:
 
-1. Server side: pass `--review-notifications=true` (or its mirror). The server registers both subscription tools
-   and polls Gerrit every `--review-notifications-poll-interval` (default `60s`): one batched query per tick over
-   all subscribed changes, with detail fetches only for changes that actually moved.
-2. Client side: delivery uses the Claude Code channels contract (research preview, Claude Code 2.1.80 or newer).
-   For a server registered plainly under `mcpServers`, launch with
-   `claude --dangerously-load-development-channels server:<name>`, where `<name>` is the registration key; it
-   becomes the `source` attribute of the injected `<channel>` blocks. Allowlisted channel plugins load with
-   `claude --channels` instead.
+1. Server: pass `--review-notifications=true` (or its mirror). The server registers both subscription tools and
+   polls Gerrit every `--review-notifications-poll-interval` (default `60s`): one batched query per tick over all
+   subscribed changes, with detail fetches only for changes that moved.
+2. Client: handle `notifications/gerrit/review_activity` on the same MCP connection that calls `subscribe_change`.
+   The server advertises `capabilities.experimental["gerrit/review_activity"]` and sends an ID-less JSON-RPC
+   notification with `params.content` (the full llmxml block) and `params.meta`. The `change` and `kind` fields
+   are always present. For a change update, `project` is present and `kind` is a comma-separated list of
+   `message`, `vote`, `comment`, or `transition`. A notice that ends a subscription because the change is no
+   longer accessible has `kind=ended` and no `project`. The client can show the activity to the operator, send it
+   into the model's session, or both. A UI-only handler does not notify the model.
 
-Research-preview caveats: organization policy can disable channels entirely; the flag syntax may change between
-Claude Code releases; and a client without channel support silently drops the events, in which case the server
-behaves exactly as if the feature were off, with no errors on either side.
+For Claude Code, the server also advertises `claude/channel` and sends the same content and metadata through
+`notifications/claude/channel`. A plain `mcpServers` registration needs
+`claude --dangerously-load-development-channels server:<name>` (Claude Code 2.1.80 or newer); allowlisted channel
+plugins load with `claude --channels`. Claude Code channels are a research preview: organization policy can disable
+them, and the flag syntax can change. A client that handles both methods must use only one to avoid duplicate
+activity. If a client does not send review activity into the model's session, use the read tools to check for
+updates.
 
 Noise control is operator configuration. The server applies no heuristics of its own and filters nothing by message
 tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
@@ -221,6 +227,8 @@ tag, because a bot's verdict is often exactly the outcome the agent is waiting f
 - `--review-notifications-exclude-accounts` silences accounts by username or numeric ID;
 - `--review-notifications-exclude-patterns` drops events whose message or comment text matches a regular
   expression; an invalid pattern fails startup with an error naming it.
+
+A filter can omit an awaited outcome. Use the read tools to confirm its state when a notification does not arrive.
 
 Every flag has a `GERRIT_MCP_*` mirror that follows the same settings layering as the rest of the configuration
 (see [Per-project configuration](#per-project-configuration-in-claude-code)), so a project can enable notifications

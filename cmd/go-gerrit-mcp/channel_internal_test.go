@@ -18,10 +18,9 @@ import (
 )
 
 const receiveDeadline = 10 * time.Second
+const expectedChannelMethod = "notifications/claude/channel"
+const neutralMethod = "notifications/gerrit/review_activity"
 
-// observedTransport wraps the client side of an in-memory pair and copies
-// every channel notification the client reads into a buffered channel; the
-// SDK client itself drops the method as undispatchable.
 type observedTransport struct {
 	inner         mcp.Transport
 	notifications chan *jsonrpc.Request
@@ -49,24 +48,22 @@ func (c *observedConn) Read(ctx context.Context) (jsonrpc.Message, error) {
 		return msg, err //nolint:wrapcheck
 	}
 
-	if req, ok := msg.(*jsonrpc.Request); ok && req.Method == channelMethod {
+	if req, ok := msg.(*jsonrpc.Request); ok &&
+		(req.Method == channelMethod || req.Method == neutralMethod) {
 		c.notifications <- req
 	}
 
 	return msg, nil
 }
 
-// channelFixture is a connected server/client pair with the production
-// capture transport on the server side and an observing transport on the
-// client side.
-type channelFixture struct {
-	emitter       *channelEmitter
+type reviewFixture struct {
+	emitter       *reviewEmitter
 	session       *mcp.ClientSession
 	notifications chan *jsonrpc.Request
 	logs          *bytes.Buffer
 }
 
-func newChannelFixture(t *testing.T) *channelFixture {
+func newReviewFixture(t *testing.T) *reviewFixture {
 	t.Helper()
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
@@ -101,48 +98,54 @@ func newChannelFixture(t *testing.T) *channelFixture {
 
 	logs := &bytes.Buffer{}
 
-	return &channelFixture{
-		emitter:       &channelEmitter{transport: capture, lgr: slog.New(slog.NewTextHandler(logs, nil))},
+	return &reviewFixture{
+		emitter:       &reviewEmitter{transport: capture, lgr: slog.New(slog.NewTextHandler(logs, nil))},
 		session:       session,
 		notifications: observed.notifications,
 		logs:          logs,
 	}
 }
 
-func (f *channelFixture) receive(t *testing.T) *jsonrpc.Request {
+func (f *reviewFixture) receive(t *testing.T) *jsonrpc.Request {
 	t.Helper()
 
 	select {
 	case req := <-f.notifications:
 		return req
 	case <-time.After(receiveDeadline):
-		t.Fatal("no channel notification before timeout")
+		t.Fatal("no review notification before timeout")
 
 		return nil
 	}
 }
 
-func Test_ChannelEmitter_Emit(t *testing.T) {
+func Test_ReviewEmitter_Emit(t *testing.T) {
 	t.Parallel()
 
 	t.Run("notification reaches the client with method and params intact", func(t *testing.T) {
 		t.Parallel()
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		content := `<review_activity change="123" status="NEW"/>`
 		require.NoError(t, f.emitter.Emit(t.Context(), content, map[string]string{"change": "123"}))
 
-		req := f.receive(t)
+		received := make(map[string]bool, 2)
 
-		assert.False(t, req.IsCall(), "channel notification must carry no request ID")
-		assert.Equal(t, channelMethod, req.Method)
+		for range 2 {
+			req := f.receive(t)
+			assert.False(t, req.IsCall(), "notification must carry no request ID")
 
-		var params channelParams
+			var params reviewParams
 
-		require.NoError(t, json.Unmarshal(req.Params, &params))
-		assert.Equal(t, content, params.Content)
-		assert.Equal(t, map[string]string{"change": "123"}, params.Meta)
+			require.NoError(t, json.Unmarshal(req.Params, &params))
+			assert.Equal(t, content, params.Content)
+			assert.Equal(t, map[string]string{"change": "123"}, params.Meta)
+
+			received[req.Method] = true
+		}
+
+		assert.Equal(t, map[string]bool{expectedChannelMethod: true, neutralMethod: true}, received)
 	})
 
 	t.Run("emissions survive concurrent tool traffic", func(t *testing.T) {
@@ -150,7 +153,7 @@ func Test_ChannelEmitter_Emit(t *testing.T) {
 
 		const emissions = 20
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		var wg sync.WaitGroup
 
@@ -181,21 +184,23 @@ func Test_ChannelEmitter_Emit(t *testing.T) {
 
 		wg.Wait()
 
-		for range emissions {
-			req := f.receive(t)
-			assert.Equal(t, channelMethod, req.Method)
+		counts := make(map[string]int, 2)
+		for range emissions * 2 {
+			counts[f.receive(t).Method]++
 		}
+
+		assert.Equal(t, map[string]int{expectedChannelMethod: emissions, neutralMethod: emissions}, counts)
 	})
 
 	t.Run("invalid meta keys dropped and named", func(t *testing.T) {
 		t.Parallel()
 
-		f := newChannelFixture(t)
+		f := newReviewFixture(t)
 
 		meta := map[string]string{"change": "123", "bad-key": "x", "worse key": "y"}
 		require.NoError(t, f.emitter.Emit(t.Context(), "content", meta))
 
-		var params channelParams
+		var params reviewParams
 
 		require.NoError(t, json.Unmarshal(f.receive(t).Params, &params))
 
@@ -208,7 +213,7 @@ func Test_ChannelEmitter_Emit(t *testing.T) {
 		t.Parallel()
 
 		logs := &bytes.Buffer{}
-		emitter := &channelEmitter{
+		emitter := &reviewEmitter{
 			transport: &captureTransport{inner: nil},
 			lgr:       slog.New(slog.NewTextHandler(logs, nil)),
 		}

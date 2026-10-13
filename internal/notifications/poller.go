@@ -12,17 +12,15 @@ import (
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
 )
 
-// Emitter delivers one rendered notification into the agent's session.
-// Content is a rendered llmxml payload; meta carries routing context that
-// becomes tag attributes on the injected block, so keys must be limited to
-// letters, digits, and underscores.
+// Emitter sends a rendered review notification to the MCP client. The client
+// decides whether to show it or send it to the model. Content is a complete
+// llmxml payload; meta carries routing fields whose keys use only letters,
+// digits, and underscores for Claude Code channel compatibility.
 type Emitter interface {
 	Emit(ctx context.Context, content string, meta map[string]string) error
 }
 
-// Renderer composes channel payloads: llmxml content plus the routing meta.
-// It lives behind an interface because payloads reuse the rendering
-// vocabulary of the tools package, which sits above this one.
+// Renderer composes complete llmxml review activity and routing metadata.
 type Renderer interface {
 	// Render composes a delta payload.
 	Render(d *Delta) (content string, meta map[string]string)

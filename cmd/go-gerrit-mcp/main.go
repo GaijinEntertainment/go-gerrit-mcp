@@ -33,17 +33,14 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 	"an allowlist of projects — refusals and errors name what to correct, and often carry did_you_mean " +
 	"proposals or hints worth following. All tool output is XML-like text addressed to you."
 
-// notificationsInstructions is appended to the instructions only when review
-// notifications are enabled; the zero-config instructions stay byte-identical.
-const notificationsInstructions = " Review notifications are enabled in this session. Right after pushing " +
-	"a change for review, or whenever a review outcome you depend on is pending — an approval, a CI " +
-	"verdict, a reviewer's reply — call subscribe_change once; new activity on that change then arrives " +
-	"here on its own as review_activity blocks carrying the change messages, votes, inline comment " +
-	"threads, and status transitions themselves, so never poll the read tools for a subscribed change. " +
-	"When a subscribed change is merged or abandoned, a final notification announces it and the " +
-	"subscription ends by itself; unsubscribe_change ends one earlier. Subscriptions are per-session and " +
-	"in-memory — nothing is visible on Gerrit, and after a restart of this server you must subscribe " +
-	"again."
+const notificationsInstructions = " If your client sends review_activity into this conversation, call " +
+	"subscribe_change after pushing a change for review or while waiting for an approval, CI verdict, or " +
+	"reviewer reply. New messages, votes, comment threads, and status transitions arrive in full when " +
+	"filters allow them. Wait for notifications instead of polling, but use the read tools to confirm " +
+	"an outcome when you need its state and no notification arrives for it. If your client does not send " +
+	"review_activity into this conversation, use the read tools to check for updates. A merged or " +
+	"abandoned change ends its subscription with a final notification; unsubscribe_change ends it " +
+	"earlier. Subscriptions are in-memory and per-session; subscribe again after a server restart."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"
@@ -95,13 +92,6 @@ type server struct {
 	poller    *notifications.Poller
 }
 
-// assemble builds the MCP server over the given transport: capability-group
-// tool resolution and registration, error middleware, instructions. With
-// review notifications enabled it additionally declares the channel
-// capability, registers subscribe_change, appends the instructions sentence,
-// and wires the poller through the connection-capturing transport; disabled,
-// the assembled server is byte-identical to the historical output and
-// starts no goroutine.
 func assemble(
 	cfg *config.Config, client *gerritclient.Client, transport mcp.Transport, lgr *slog.Logger,
 ) (*server, error) {
@@ -129,7 +119,7 @@ func assemble(
 	if cfg.ReviewNotifications {
 		capture := &captureTransport{inner: transport}
 		store := notifications.NewStore()
-		emitter := &channelEmitter{transport: capture, lgr: lgr}
+		emitter := &reviewEmitter{transport: capture, lgr: lgr}
 
 		tools.SubscribeChange(client, store).Register(srv)
 		tools.UnsubscribeChange(client, store).Register(srv)
@@ -155,16 +145,7 @@ func assemble(
 	return s, nil
 }
 
-// serverOptions carries the instructions and, only when review notifications
-// are enabled, the channel capability. Overriding Capabilities keeps the
-// SDK's tools inference but drops its logging default, so Logging is
-// declared explicitly to keep parity with the disabled path (pinned by
-// Test_Learning_CapabilitiesOverride).
-//
-// SEP-2577 deprecates logging as of protocol version 2026-07-28, yet the SDK
-// keeps declaring it for a nil Capabilities, so parity still needs the
-// explicit declaration. Drop it — and the assertions that pin it — once the
-// SDK drops its own default.
+// constraint: The SDK drops its default logging capability when Capabilities is set.
 func serverOptions(cfg *config.Config) *mcp.ServerOptions {
 	opts := &mcp.ServerOptions{Instructions: instructions}
 
@@ -172,8 +153,11 @@ func serverOptions(cfg *config.Config) *mcp.ServerOptions {
 		opts.Instructions += notificationsInstructions
 
 		opts.Capabilities = &mcp.ServerCapabilities{
-			Logging:      &mcp.LoggingCapabilities{}, //nolint:staticcheck // deprecated, kept for parity — see above
-			Experimental: map[string]any{channelCapability: map[string]any{}},
+			Logging: &mcp.LoggingCapabilities{}, //nolint:staticcheck // keep the SDK's default logging capability
+			Experimental: map[string]any{
+				channelCapability:        map[string]any{},
+				reviewActivityCapability: map[string]any{},
+			},
 		}
 	}
 
