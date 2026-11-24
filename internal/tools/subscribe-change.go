@@ -34,16 +34,16 @@ func SubscribeChange(c *gerritclient.Client, store *notifications.Store) Tool {
 		Register: func(s *mcp.Server) {
 			mcp.AddTool(s, &mcp.Tool{
 				Name: NameSubscribeChange,
-				Description: "Subscribe this session to a Gerrit change. Call it right after pushing " +
-					"a change for review, or when a review outcome you depend on is pending — an " +
-					"approval, a CI verdict, a reviewer's reply. New activity then arrives in the " +
-					"session by itself: change messages, votes, inline comment threads, and status " +
-					"transitions, carried whole — never poll the read tools for a subscribed " +
-					"change. When the change is merged or abandoned, a final notification announces " +
-					"it and the subscription ends automatically; subscribing to a change already in " +
-					"such a state is refused. The subscription is per-session and in-memory: it " +
-					"leaves no trace on Gerrit, ends with the session, and after a server restart " +
-					"you must subscribe again.",
+				Description: "Subscribe this session to a Gerrit change when your client sends " +
+					"review_activity into this conversation. Call after pushing a change for review or " +
+					"while waiting for an approval, CI verdict, or reviewer reply. New messages, votes, " +
+					"comment threads, and status transitions arrive in full when filters allow them. " +
+					"Wait for notifications instead of polling. Use the read tools to confirm an outcome " +
+					"when you need its state and no notification arrives for it. If the client does not " +
+					"send review_activity into this conversation, use the read tools instead. A merged or " +
+					"abandoned change ends the subscription with a final notification; a change " +
+					"already in that state cannot be subscribed. " +
+					"Subscriptions are in-memory and per-session; subscribe again after a server restart.",
 			}, func(ctx context.Context, _ *mcp.CallToolRequest, in subscribeChangeInput,
 			) (*mcp.CallToolResult, any, error) {
 				info, err := c.GetChange(ctx, in.Change)
@@ -81,7 +81,9 @@ func renderSubscribed(ci *gerrit.ChangeInfo) string {
 		el.Attr(llmxml.Attr("patch_set", rev.Number))
 	}
 
-	el.InlineText("Review activity on this change now arrives in this session automatically.")
+	el.InlineText("Subscription registered. If your client sends review_activity into this conversation, " +
+		"activity that passes the filters arrives automatically. Use the read tools to check an awaited " +
+		"outcome that did not arrive, or to check updates if your client does not send review_activity.")
 
 	return el.String()
 }
