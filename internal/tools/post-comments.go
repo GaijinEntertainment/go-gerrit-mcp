@@ -261,16 +261,7 @@ func validateCommentFiles(ctx context.Context, c *gerritclient.Client, in postCo
 			fields.F("file", file),
 		)
 
-		paths := make([]string, 0, len(files))
-		for path := range files {
-			paths = append(paths, path)
-		}
-
-		if near := proposals(file, paths); len(near) > 0 {
-			return res.WithField("did_you_mean", strings.Join(near, ", "))
-		}
-
-		return res.WithField("hint", "list_change_files names the files of the current revision")
+		return withNearestFiles(res, file, files, "list_change_files names the files of the current revision")
 	}
 
 	return nil
