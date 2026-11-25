@@ -427,28 +427,27 @@ func renderComments(in getChangeCommentsInput, threads []thread, drafts int) str
 	return root.WrapText(strings.Join(sections, "\n")).String()
 }
 
-// renderSection wraps one resolution state's threads, grouped by the file
-// path of each thread's root comment.
+// renderSection wraps one resolution state's threads.
 func renderSection(name string, threads []thread) string {
 	if len(threads) == 0 {
 		return ""
 	}
 
+	return llmxml.NewElement(name, llmxml.Attr("count", len(threads))).
+		WrapText(strings.Join(renderThreadFiles(threads), "\n")).String()
+}
+
+// renderThreadFiles renders threads as file elements, grouped by the file
+// path of each thread's root comment.
+func renderThreadFiles(threads []thread) []string {
 	byFile := map[string][]thread{}
 	for _, t := range threads {
 		byFile[t.root.path] = append(byFile[t.root.path], t)
 	}
 
-	paths := make([]string, 0, len(byFile))
-	for path := range byFile {
-		paths = append(paths, path)
-	}
+	rendered := make([]string, 0, len(byFile))
 
-	slices.SortStableFunc(paths, compareRenderPaths)
-
-	rendered := make([]string, 0, len(paths))
-
-	for _, path := range paths {
+	for _, path := range slices.SortedFunc(maps.Keys(byFile), compareRenderPaths) {
 		fileThreads := byFile[path]
 		slices.SortStableFunc(fileThreads, compareThreads)
 
@@ -461,8 +460,7 @@ func renderSection(name string, threads []thread) string {
 			WrapText(strings.Join(lines, "\n")).String())
 	}
 
-	return llmxml.NewElement(name, llmxml.Attr("count", len(threads))).
-		WrapText(strings.Join(rendered, "\n")).String()
+	return rendered
 }
 
 // Display ranks for file paths: the change level first, the commit message

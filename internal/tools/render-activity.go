@@ -128,49 +128,18 @@ func renderActivityVote(v notifications.Vote) string {
 	).String()
 }
 
-// renderActivityThreads renders every thread touched by a new comment,
-// grouped by file exactly as get_change_comments groups them; the thread
-// elements themselves come from the same renderer and are byte-identical.
+// renderActivityThreads renders every thread touched by a new comment as
+// get_change_comments renders threads.
 func renderActivityThreads(d *notifications.Delta) []string {
 	if len(d.NewComments) == 0 {
 		return nil
 	}
 
-	threads := buildThreads(flattenComments(d.Comments, nil, ""))
+	touched := slices.DeleteFunc(buildThreads(flattenComments(d.Comments, nil, "")), func(t thread) bool {
+		return !threadTouched(t, d.NewComments)
+	})
 
-	byFile := map[string][]thread{}
-
-	for _, t := range threads {
-		if !threadTouched(t, d.NewComments) {
-			continue
-		}
-
-		byFile[t.root.path] = append(byFile[t.root.path], t)
-	}
-
-	paths := make([]string, 0, len(byFile))
-	for path := range byFile {
-		paths = append(paths, path)
-	}
-
-	slices.SortStableFunc(paths, compareRenderPaths)
-
-	rendered := make([]string, 0, len(paths))
-
-	for _, path := range paths {
-		fileThreads := byFile[path]
-		slices.SortStableFunc(fileThreads, compareThreads)
-
-		lines := make([]string, 0, len(fileThreads))
-		for _, t := range fileThreads {
-			lines = append(lines, renderThread(t))
-		}
-
-		rendered = append(rendered, llmxml.NewElement("file", llmxml.Attr("path", path)).
-			WrapText(strings.Join(lines, "\n")).String())
-	}
-
-	return rendered
+	return renderThreadFiles(touched)
 }
 
 // threadTouched reports whether any of the thread's comments is new.
