@@ -21,6 +21,7 @@ const (
 	NamePostComments      = "post_comments"
 	NameSetVote           = "set_vote"
 	NameTransitionChange  = "transition_change"
+	NameGetServerInfo     = "get_server_info"
 )
 
 // Tool binds a tool name to its MCP registration.

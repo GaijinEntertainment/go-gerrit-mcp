@@ -7,6 +7,10 @@ lost, and what would reopen it.
 - A task that conflicts with a listed decision stops and asks; it does not change the decision or work around it.
 - Writing, changing, or removing a record follows the `the-blueprint:adr` skill.
 
+## cmd/go-gerrit-mcp
+
+- [1.4 Report server identity and readiness through an always-registered tool](/design-docs/adr/1.4-server-readiness.md)
+
 ## internal/config
 
 - [1.2 Default to the read group, and to trail-leaving on own changes only](/design-docs/adr/1.2-safe-by-default-posture.md)

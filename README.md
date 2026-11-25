@@ -171,6 +171,8 @@ own, and enabled groups union.
 | `comment`    | `get_change`, `get_change_comments`, `post_comments`                                     |
 | `transition` | `get_change`, `set_vote`, `transition_change`                                            |
 
+`get_server_info` is outside the groups: every configuration registers it, and no tool filter removes it.
+
 ### Tools
 
 - `search_changes`: query changes with Gerrit's change query syntax, paginated.
@@ -181,6 +183,8 @@ own, and enabled groups union.
   threads only by default; `status=all` fetches the full history, `status=resolved` the settled threads.
 - `get_review_activity`: new review activity on a list of changes past a point that the caller keeps, as JSON for
   a program. The server keeps no state. The [review notifications](#review-notifications) plugin calls it.
+- `get_server_info`: the server name and version, the MCP protocol version, the Gerrit account, and the enabled
+  groups, tools, and project scope, as JSON for a program.
 - `post_comments`: publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments. Replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote`: set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.
@@ -258,7 +262,7 @@ Notes:
 ## Output format
 
 Every tool that a model reads responds in llmxml, an LLM-digestible subset of XML: line-structured, semantically
-tagged text. The one exception is `get_review_activity`, which returns JSON for the plugin that calls it. Attributes carry metadata; element bodies carry content:
+tagged text. The exceptions are `get_review_activity` and `get_server_info`, which return JSON for the plugin that calls them. Attributes carry metadata; element bodies carry content:
 
 ```
 <changes query="status:open owner:self" start="0" count="1" more="false">
