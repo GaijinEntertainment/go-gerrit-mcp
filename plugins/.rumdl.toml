@@ -1,0 +1,12 @@
+[global]
+line-length = 120
+
+[per-file-ignores]
+# a README opens with its badge block, which a div centers
+"**/README.md" = ["MD033", "MD041"]
+
+[MD013]
+reflow = true
+# nothing can break a line inside a code block or a code span
+code-blocks = false
+code-spans = false

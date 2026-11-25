@@ -16,6 +16,9 @@ Use it before naming anything user-facing.
 - Test: `go test -race ./...`
 - Lint: `golangci-lint run`
 - Format: `golangci-lint fmt`
+- Plugins, from `plugins/`: `vp check` (format of the code; lint and types of the files in `plugins/` itself),
+  `vp exec rumdl fmt .` (markdown), `vp run plugins` (validates the marketplace and every plugin, runs every mod's
+  tests). No CI step lints or type-checks a mod's own sources: their types exist only where Claude Code loaded the mod
 
 ## Constraints
 
