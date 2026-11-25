@@ -93,7 +93,7 @@ type behaviorFlag struct {
 	usage    string
 	fallback string
 
-	value string `exhaustruct:"optional"`
+	value string //exhaustruct:optional
 }
 
 // Load resolves configuration from CLI arguments and the environment.

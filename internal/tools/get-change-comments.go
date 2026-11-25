@@ -89,7 +89,7 @@ type changeComment struct {
 	// sortRange is the range the change screen sorts by: the comment's own,
 	// or the parent's when sanitiseRanges inherits it. Rendering keeps the
 	// comment's real Range.
-	sortRange *gerrit.CommentRange `exhaustruct:"optional"`
+	sortRange *gerrit.CommentRange //exhaustruct:optional
 }
 
 // flattenComments merges the published and draft per-file comment maps into

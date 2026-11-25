@@ -59,8 +59,8 @@ func NewElement(tag string, attrs ...Attribute) *Element {
 type Element struct {
 	tag    string
 	attrs  []Attribute
-	text   string `exhaustruct:"optional"`
-	sealed bool   `exhaustruct:"optional"`
+	text   string //exhaustruct:optional
+	sealed bool   //exhaustruct:optional
 }
 
 // Attr appends an attribute to the opening tag.

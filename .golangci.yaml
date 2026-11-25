@@ -31,6 +31,7 @@ linters:
     - sloglint
     - noinlineerr
     - wsl # replaced by wsl_v5
+    - exhaustruct # replaced by exhaustruct_v5
     - gomodguard # replaced by gomodguard_v2
     - unqueryvet
   settings:
@@ -56,9 +57,9 @@ linters:
         - (*strings.Builder).WriteRune
         - (*strings.Builder).WriteString
         - (*os.File).Close
-    exhaustruct:
+    exhaustruct_v5:
       allow-empty-returns: true
-      exclude:
+      ignore-patterns:
         - net/http\.Transport
         - net/http\.Server
         - net/http\.Client
@@ -244,8 +245,9 @@ linters:
         - require-error
     wrapcheck:
       ignore-package-globs:
-        # own packages return golib/e errors that already carry context
+        # own packages and golib/e return errors that already carry context
         - dev.gaijin.team/go/go-gerrit-mcp/*
+        - dev.gaijin.team/go/golib/*
     wsl_v5:
       default: all
       branch-max-lines: 4
