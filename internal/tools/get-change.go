@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -83,16 +84,9 @@ func renderLabels(labels map[string]gerrit.LabelInfo) string {
 		return ""
 	}
 
-	names := make([]string, 0, len(labels))
-	for name := range labels {
-		names = append(names, name)
-	}
+	rendered := make([]string, 0, len(labels))
 
-	slices.Sort(names)
-
-	rendered := make([]string, 0, len(names))
-
-	for _, name := range names {
+	for _, name := range slices.Sorted(maps.Keys(labels)) {
 		info := labels[name]
 		label := llmxml.NewElement("label", llmxml.Attr("name", name))
 
@@ -128,16 +122,9 @@ func renderReviewers(reviewers map[string][]gerrit.AccountInfo) string {
 		return ""
 	}
 
-	states := make([]string, 0, len(reviewers))
-	for state := range reviewers {
-		states = append(states, state)
-	}
-
-	slices.Sort(states)
-
 	var rendered []string
 
-	for _, state := range states {
+	for _, state := range slices.Sorted(maps.Keys(reviewers)) {
 		for _, account := range reviewers[state] {
 			rendered = append(rendered, llmxml.NewElement("reviewer",
 				llmxml.Attr("state", state),
