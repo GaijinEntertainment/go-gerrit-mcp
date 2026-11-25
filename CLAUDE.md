@@ -5,6 +5,8 @@ stdio transport, llmxml output. `plugins/gerrit-review-notifications/` is the Cl
 notifications; it has its own `CLAUDE.md`. Work is driven by `design-docs/` (brief, research, alignment, frame, tasks;
 ADRs in `design-docs/adr/`); GitHub issues #1-#23 map 1:1 to the task breakdown.
 
+@design-docs/ADR.md
+
 ## Vocabulary
 
 `docs/glossary.md` defines canonical terms and forbidden aliases (capability groups, trail-leaving, llmxml, scoping).
