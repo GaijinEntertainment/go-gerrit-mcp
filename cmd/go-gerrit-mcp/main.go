@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"slices"
 	"syscall"
 
@@ -37,6 +38,17 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"
+
+// serverVersion reports the stamped version, or for a binary built by
+// go install the module version that the Go toolchain recorded.
+func serverVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if version != "dev" || !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return version
+	}
+
+	return info.Main.Version
+}
 
 func main() {
 	lgr := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -87,7 +99,7 @@ type server struct {
 // tool resolution and registration, error middleware, instructions.
 func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Transport) (*server, error) {
 	srv := mcp.NewServer(
-		&mcp.Implementation{Name: serverName, Version: version},
+		&mcp.Implementation{Name: serverName, Version: serverVersion()},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
 	srv.AddReceivingMiddleware(tools.WrapErrors)
