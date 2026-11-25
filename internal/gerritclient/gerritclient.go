@@ -30,9 +30,8 @@ const (
 
 // Sentinels for the two startup failure classes.
 var (
-	ErrClientInit    = e.New("create gerrit client")
-	ErrCredentials   = e.New("gerrit credential validation")
-	errEmptyResponse = e.New("gerrit returned an empty response")
+	ErrClientInit  = e.New("create gerrit client")
+	ErrCredentials = e.New("gerrit credential validation")
 )
 
 // Client is the process-wide authenticated Gerrit API client.
@@ -62,10 +61,6 @@ func New(ctx context.Context, cfg *config.Config) (*Client, error) {
 	self, resp, err := g.Accounts.GetAccount(ctx, "self")
 	if err != nil {
 		return nil, ErrCredentials.Wrap(apiError(resp, err))
-	}
-
-	if self == nil {
-		return nil, ErrCredentials.Wrap(errEmptyResponse)
 	}
 
 	return &Client{
