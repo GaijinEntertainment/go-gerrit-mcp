@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -51,16 +52,9 @@ func renderFiles(in listChangeFilesInput, files map[string]gerrit.FileInfo) stri
 		return root.String()
 	}
 
-	paths := make([]string, 0, len(files))
-	for path := range files {
-		paths = append(paths, path)
-	}
+	rendered := make([]string, 0, len(files))
 
-	slices.Sort(paths)
-
-	rendered := make([]string, 0, len(paths))
-
-	for _, path := range paths {
+	for _, path := range slices.Sorted(maps.Keys(files)) {
 		info := files[path]
 
 		// Gerrit omits the status of plainly modified files.

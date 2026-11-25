@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -75,12 +76,7 @@ func enrichVoteError(ctx context.Context, c *gerritclient.Client, change string,
 		return err
 	}
 
-	names := make([]string, 0, len(info.Labels))
-	for name := range info.Labels {
-		names = append(names, name)
-	}
-
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(info.Labels))
 
 	return e.From(err).WithField("configured_labels", strings.Join(names, ", "))
 }

@@ -5,6 +5,7 @@
 package registry
 
 import (
+	"slices"
 	"strings"
 
 	"dev.gaijin.team/go/golib/e"
@@ -17,9 +18,7 @@ import (
 // ErrUnknownTools reports filter entries that name no known tool.
 var ErrUnknownTools = e.New("unknown tool names in filters")
 
-// groupTools returns the canonical group → tool-name mapping. Write-capable
-// groups will additionally bundle the minimal read subset they need to
-// function on their own.
+// groupTools returns the canonical group → tool-name mapping.
 func groupTools() map[config.Group][]string {
 	return map[config.Group][]string{
 		config.GroupRead: {
@@ -95,7 +94,7 @@ func validateFilters(cfg *config.Config) error {
 
 	var unknown []string
 
-	for _, name := range append(append([]string{}, cfg.IncludeTools...), cfg.ExcludeTools...) {
+	for _, name := range slices.Concat(cfg.IncludeTools, cfg.ExcludeTools) {
 		if !known[name] {
 			unknown = append(unknown, name)
 		}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"dev.gaijin.team/go/golib/e"
@@ -96,11 +97,6 @@ func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Tra
 		return nil, err
 	}
 
-	set := make(map[string]bool, len(enabled))
-	for _, name := range enabled {
-		set[name] = true
-	}
-
 	filters := notifications.Filters{
 		Self:            client.Self(),
 		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
@@ -109,7 +105,7 @@ func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Tra
 	}
 
 	for _, t := range tools.All(client, filters) {
-		if set[t.Name] {
+		if slices.Contains(enabled, t.Name) {
 			t.Register(srv)
 		}
 	}
