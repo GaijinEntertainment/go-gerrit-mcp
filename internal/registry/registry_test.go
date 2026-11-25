@@ -21,8 +21,6 @@ func cfg(groups []config.Group, include, exclude []string) *config.Config {
 		ExcludeTools:                       exclude,
 		Projects:                           nil,
 		AllowForeignChanges:                false,
-		ReviewNotifications:                false,
-		ReviewNotificationsPollInterval:    0,
 		ReviewNotificationsIncludeOwn:      false,
 		ReviewNotificationsExcludeAccounts: nil,
 		ReviewNotificationsExcludePatterns: nil,
@@ -36,6 +34,7 @@ func allReadTools() []string {
 		tools.NameListChangeFiles,
 		tools.NameGetFileDiff,
 		tools.NameGetChangeComments,
+		tools.NameGetReviewActivity,
 	}
 }
 
@@ -121,6 +120,7 @@ func Test_Resolve(t *testing.T) {
 				tools.NameGetChange,
 				tools.NameListChangeFiles,
 				tools.NameGetChangeComments,
+				tools.NameGetReviewActivity,
 			},
 		},
 		{

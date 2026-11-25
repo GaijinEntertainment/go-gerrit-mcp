@@ -30,21 +30,8 @@ func golden(t *testing.T, name, got string) {
 	assert.Equal(t, string(want), got)
 }
 
-// Test_Instructions pins the model-facing instructions in both
-// configurations: the disabled variant is the zero-config contract and must
-// never drift; the enabled variant appends the review-notifications section.
 func Test_Instructions(t *testing.T) {
 	t.Parallel()
 
-	t.Run("disabled", func(t *testing.T) {
-		t.Parallel()
-
-		golden(t, "instructions-disabled", serverOptions(testConfig(false, 0)).Instructions)
-	})
-
-	t.Run("enabled", func(t *testing.T) {
-		t.Parallel()
-
-		golden(t, "instructions-enabled", serverOptions(testConfig(true, 0)).Instructions)
-	})
+	golden(t, "instructions", instructions)
 }

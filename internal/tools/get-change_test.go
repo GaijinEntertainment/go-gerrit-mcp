@@ -11,6 +11,7 @@ import (
 
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/config"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
 
@@ -61,8 +62,6 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 		ExcludeTools:                       nil,
 		Projects:                           nil,
 		AllowForeignChanges:                false,
-		ReviewNotifications:                false,
-		ReviewNotificationsPollInterval:    0,
 		ReviewNotificationsIncludeOwn:      false,
 		ReviewNotificationsExcludeAccounts: nil,
 		ReviewNotificationsExcludePatterns: nil,
@@ -77,7 +76,14 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
 	mcpServer.AddReceivingMiddleware(tools.WrapErrors)
 
-	for _, tool := range tools.All(client) {
+	filters := notifications.Filters{
+		Self:            client.Self(),
+		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
+		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
+		ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
+	}
+
+	for _, tool := range tools.All(client, filters) {
 		tool.Register(mcpServer)
 	}
 
@@ -116,7 +122,7 @@ func Test_GetChange(t *testing.T) {
 
 		assert.ElementsMatch(t, []string{
 			"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
-			"post_comments", "set_vote", "transition_change",
+			"get_review_activity", "post_comments", "set_vote", "transition_change",
 		}, names)
 	})
 

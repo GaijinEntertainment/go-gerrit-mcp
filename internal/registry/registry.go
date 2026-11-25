@@ -28,6 +28,7 @@ func groupTools() map[config.Group][]string {
 			tools.NameListChangeFiles,
 			tools.NameGetFileDiff,
 			tools.NameGetChangeComments,
+			tools.NameGetReviewActivity,
 		},
 		// comment bundles the minimal read subset it needs: understanding the
 		// change and the threads it replies to.

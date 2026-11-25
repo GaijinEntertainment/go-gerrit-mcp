@@ -1,16 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,11 +15,11 @@ import (
 
 const stubSelfJSON = ")]}'\n" + `{"_account_id":42,"name":"Review Bot","username":"bot"}`
 
-// readGroupTools is the historical zero-config tool list; byte-identity of
-// the disabled path is asserted against it.
+// readGroupTools is the zero-config tool list.
 func readGroupTools() []string {
 	return []string{
 		"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
+		"get_review_activity",
 	}
 }
 
@@ -44,8 +38,6 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 		ExcludeTools:                       nil,
 		Projects:                           nil,
 		AllowForeignChanges:                false,
-		ReviewNotifications:                false,
-		ReviewNotificationsPollInterval:    0,
 		ReviewNotificationsIncludeOwn:      false,
 		ReviewNotificationsExcludeAccounts: nil,
 		ReviewNotificationsExcludePatterns: nil,
@@ -55,7 +47,7 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 	return client
 }
 
-func testConfig(reviewNotifications bool, interval time.Duration) *config.Config {
+func testConfig() *config.Config {
 	return &config.Config{
 		GerritURL:                          "",
 		Username:                           "",
@@ -65,8 +57,6 @@ func testConfig(reviewNotifications bool, interval time.Duration) *config.Config
 		ExcludeTools:                       nil,
 		Projects:                           nil,
 		AllowForeignChanges:                false,
-		ReviewNotifications:                reviewNotifications,
-		ReviewNotificationsPollInterval:    interval,
 		ReviewNotificationsIncludeOwn:      false,
 		ReviewNotificationsExcludeAccounts: nil,
 		ReviewNotificationsExcludePatterns: nil,
@@ -91,17 +81,15 @@ func toolNames(t *testing.T, session *mcp.ClientSession) []string {
 	return names
 }
 
-func Test_Assemble_Disabled(t *testing.T) {
+func Test_Assemble(t *testing.T) {
 	t.Parallel()
 
 	client := testGerritClient(t, selfOnlyHandler)
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 
-	s, err := assemble(testConfig(false, 0), client, serverTransport, discardLogger())
+	s, err := assemble(testConfig(), client, serverTransport)
 	require.NoError(t, err)
-	assert.Nil(t, s.poller, "disabled feature must assemble no poller")
-	assert.Same(t, serverTransport, s.transport, "disabled feature must not wrap the transport")
 
 	_, err = s.mcp.Connect(t.Context(), s.transport, nil)
 	require.NoError(t, err)
@@ -109,144 +97,10 @@ func Test_Assemble_Disabled(t *testing.T) {
 	session := connectClient(t, clientTransport)
 
 	init := session.InitializeResult()
-	assert.Equal(t, instructions, init.Instructions, "zero-config instructions must stay byte-identical")
-
-	caps := init.Capabilities
-	require.NotNil(t, caps)
-	//nolint:staticcheck // logging is deprecated (SEP-2577); the SDK still declares it by default
-	assert.NotNil(t, caps.Logging, "zero-config keeps the SDK logging default")
-	assert.NotNil(t, caps.Tools)
-	assert.Empty(t, caps.Experimental, "zero-config declares no experimental capability")
+	assert.Equal(t, instructions, init.Instructions)
+	assert.Empty(t, init.Capabilities.Experimental, "the server declares no experimental capability")
 
 	assert.ElementsMatch(t, readGroupTools(), toolNames(t, session))
-}
-
-func Test_Assemble_Enabled(t *testing.T) {
-	t.Parallel()
-
-	client := testGerritClient(t, selfOnlyHandler)
-
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-
-	s, err := assemble(testConfig(true, time.Minute), client, serverTransport, discardLogger())
-	require.NoError(t, err)
-	require.NotNil(t, s.poller)
-
-	_, err = s.mcp.Connect(t.Context(), s.transport, nil)
-	require.NoError(t, err)
-
-	session := connectClient(t, clientTransport)
-
-	init := session.InitializeResult()
-	assert.Equal(t, instructions+notificationsInstructions, init.Instructions)
-
-	caps := init.Capabilities
-	require.NotNil(t, caps)
-	assert.Contains(t, caps.Experimental, channelCapability)
-	//nolint:staticcheck // logging is deprecated (SEP-2577); serverOptions still declares it for parity
-	assert.NotNil(t, caps.Logging, "logging capability must survive the override")
-	assert.NotNil(t, caps.Tools, "tools capability must survive the override")
-
-	assert.ElementsMatch(t,
-		append(readGroupTools(), "subscribe_change", "unsubscribe_change"), toolNames(t, session))
-}
-
-// Test_Assemble_TracerBullet drives the whole enabled stack in-process:
-// subscribe through the tool, move the change on the stub Gerrit, receive
-// the channel notification pushed by the poller.
-func Test_Assemble_TracerBullet(t *testing.T) {
-	t.Parallel()
-
-	const receiveTimeout = 10 * time.Second
-
-	initialDetail := ")]}'\n" + `{"_number":123,"project":"core","status":"NEW",` +
-		`"updated":"2026-07-01 10:00:00.000000000",` +
-		`"current_revision":"abc","revisions":{"abc":{"_number":1}}}`
-	movedDetail := ")]}'\n" + `{"_number":123,"project":"core","status":"NEW",` +
-		`"updated":"2026-07-01 11:00:00.000000000",` +
-		`"current_revision":"abc","revisions":{"abc":{"_number":1}},` +
-		`"messages":[{"id":"m1","author":{"_account_id":8,"username":"bob"},` +
-		`"date":"2026-07-01 11:00:00.000000000","message":"ping","_revision_number":1}]}`
-	movedQuery := ")]}'\n" + `[{"_number":123,"project":"core","status":"NEW",` +
-		`"updated":"2026-07-01 11:00:00.000000000"}]`
-
-	// moved flips after the subscribe call: the stub then reports the change
-	// as updated so the next poll tick picks it up.
-	var moved atomic.Bool
-
-	client := testGerritClient(t, func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/a/accounts/self":
-			_, _ = w.Write([]byte(stubSelfJSON))
-
-		case "/a/changes/":
-			if moved.Load() {
-				_, _ = w.Write([]byte(movedQuery))
-
-				return
-			}
-
-			_, _ = w.Write([]byte(")]}'\n[]"))
-
-		case "/a/changes/123":
-			if moved.Load() {
-				_, _ = w.Write([]byte(movedDetail))
-
-				return
-			}
-
-			_, _ = w.Write([]byte(initialDetail))
-
-		case "/a/changes/123/comments":
-			_, _ = w.Write([]byte(")]}'\n{}"))
-
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	})
-
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	observed := &observedTransport{
-		inner:         clientTransport,
-		notifications: make(chan *jsonrpc.Request, 16),
-	}
-
-	s, err := assemble(testConfig(true, 10*time.Millisecond), client, serverTransport, discardLogger())
-	require.NoError(t, err)
-
-	runDone := make(chan error, 1)
-
-	go func() { runDone <- s.run(t.Context()) }()
-
-	session := connectClient(t, observed)
-
-	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{
-		Name:      "subscribe_change",
-		Arguments: map[string]any{"change": "123"},
-	})
-	require.NoError(t, err)
-	require.False(t, res.IsError)
-
-	moved.Store(true)
-
-	select {
-	case req := <-observed.notifications:
-		assert.Equal(t, channelMethod, req.Method)
-
-		var params channelParams
-
-		require.NoError(t, json.Unmarshal(req.Params, &params))
-		assert.Contains(t, params.Content, `<review_activity change="123"`)
-		assert.Contains(t, params.Content, "ping", "the payload carries the activity itself")
-		assert.Equal(t, map[string]string{"change": "123", "project": "core", "kind": "message"}, params.Meta)
-
-	case <-time.After(receiveTimeout):
-		t.Fatal("no channel notification before timeout")
-	}
-}
-
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func connectClient(t *testing.T, transport mcp.Transport) *mcp.ClientSession {

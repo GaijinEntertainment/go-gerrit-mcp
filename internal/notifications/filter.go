@@ -44,7 +44,9 @@ func (f Filters) apply(d *Delta) {
 }
 
 // pruneComments unmarks new comments whose author or text is excluded; a
-// thread none of whose new comments survive is not rendered.
+// thread none of whose new comments survive is not rendered. A thread with a
+// surviving new comment renders whole: an excluded comment in it is the
+// context of that comment, not an event.
 func (f Filters) pruneComments(d *Delta) {
 	if len(d.NewComments) == 0 {
 		return

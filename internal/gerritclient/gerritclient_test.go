@@ -23,8 +23,6 @@ func testConfig(url string) *config.Config {
 		ExcludeTools:                       nil,
 		Projects:                           nil,
 		AllowForeignChanges:                false,
-		ReviewNotifications:                false,
-		ReviewNotificationsPollInterval:    0,
 		ReviewNotificationsIncludeOwn:      false,
 		ReviewNotificationsExcludeAccounts: nil,
 		ReviewNotificationsExcludePatterns: nil,

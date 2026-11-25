@@ -167,7 +167,7 @@ own, and enabled groups union.
 
 | Group        | Tools                                                                                    |
 | ------------ | ---------------------------------------------------------------------------------------- |
-| `read`       | `search_changes`, `get_change`, `list_change_files`, `get_file_diff`, `get_change_comments` |
+| `read`       | `search_changes`, `get_change`, `list_change_files`, `get_file_diff`, `get_change_comments`, `get_review_activity` |
 | `comment`    | `get_change`, `get_change_comments`, `post_comments`                                     |
 | `transition` | `get_change`, `set_vote`, `transition_change`                                            |
 
@@ -179,6 +179,8 @@ own, and enabled groups union.
 - `get_file_diff`: the diff of one file in a revision.
 - `get_change_comments`: comment threads on a change, with resolution state and comment ids. Returns unresolved
   threads only by default; `status=all` fetches the full history, `status=resolved` the settled threads.
+- `get_review_activity`: new review activity on a list of changes past a point that the caller keeps, as JSON for
+  a program. The server keeps no state. The [review notifications](#review-notifications) plugin calls it.
 - `post_comments`: publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments. Replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote`: set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.
@@ -188,34 +190,30 @@ own, and enabled groups union.
 
 ## Review notifications
 
-An opt-in push channel for review activity. The agent subscribes to a change with `subscribe_change`; from then on,
-new change messages, votes, inline comment threads, and status transitions arrive in the session on their own as
-`review_activity` blocks. The payload uses the same llmxml vocabulary the read tools emit and carries the activity
-whole, so nothing needs fetching afterwards. `unsubscribe_change` ends a subscription early. A merged or abandoned
-change ends its own subscription with a final notification that says so, and a change that becomes unreadable
-(deleted, or no longer visible to the account) does the same, with the reason spelled out.
+Review activity that arrives in the session by itself. The Claude Code plugin
+[gerrit-review-notifications](plugins/gerrit-review-notifications/) adds two tools, `subscribe_change` and
+`unsubscribe_change`. After the agent subscribes to a change, new change messages, votes, inline comment threads, and
+status transitions arrive in the session as `review_activity` blocks. A block uses the same llmxml vocabulary as the
+read tools and carries the activity whole, so nothing needs fetching afterwards. A merged or abandoned change ends its
+own subscription with a last notification that says so, and so does a change that becomes unreadable (deleted, or no
+longer visible to the account).
 
-Subscriptions are per-session and in-memory: they leave no trace on the Gerrit instance, end with the session, and
-after a server restart the agent subscribes again. With the feature off (the default) the server is byte-identical
-to its pre-feature self, with no extra tools or capabilities and no background polling.
+The server has no `--review-notifications` and `--review-notifications-poll-interval` flags, and it does not start
+with either of them: remove them from the server arguments, and install the plugin in Claude Code:
 
-Enabling takes both sides:
+```
+/plugin install gerrit-review-notifications --marketplace GaijinEntertainment/go-gerrit-mcp
+```
 
-1. Server side: pass `--review-notifications=true` (or its mirror). The server registers both subscription tools
-   and polls Gerrit every `--review-notifications-poll-interval` (default `60s`): one batched query per tick over
-   all subscribed changes, with detail fetches only for changes that actually moved.
-2. Client side: delivery uses the Claude Code channels contract (research preview, Claude Code 2.1.80 or newer).
-   For a server registered plainly under `mcpServers`, launch with
-   `claude --dangerously-load-development-channels server:<name>`, where `<name>` is the registration key; it
-   becomes the `source` attribute of the injected `<channel>` blocks. Allowlisted channel plugins load with
-   `claude --channels` instead.
+The plugin starts no server. Every 60 seconds it calls `get_review_activity` on the Gerrit MCP server that the session
+already runs: one batched query for all subscribed changes, and a detail fetch only for a change that moved or that
+the query did not list. It finds the server by name: `gerrit` by default, or the name in the plugin option `server`.
+That server must offer `get_review_activity`, which the `read` group includes.
 
-Research-preview caveats: organization policy can disable channels entirely; the flag syntax may change between
-Claude Code releases; and a client without channel support silently drops the events, in which case the server
-behaves exactly as if the feature were off, with no errors on either side.
+Subscriptions belong to one session and leave no trace on the Gerrit instance. The server holds nothing about them.
 
-Noise control is operator configuration. The server applies no heuristics of its own and filters nothing by message
-tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
+Noise control is operator configuration on the server. The server applies no heuristics of its own and filters
+nothing by message tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
 
 - the authenticated account's own activity is skipped by default (`--review-notifications-include-own` keeps it);
 - `--review-notifications-exclude-accounts` silences accounts by username or numeric ID;
@@ -223,8 +221,8 @@ tag, because a bot's verdict is often exactly the outcome the agent is waiting f
   expression; an invalid pattern fails startup with an error naming it.
 
 Every flag has a `GERRIT_MCP_*` mirror that follows the same settings layering as the rest of the configuration
-(see [Per-project configuration](#per-project-configuration-in-claude-code)), so a project can enable notifications
-and pick exclusions in its own settings file.
+(see [Per-project configuration](#per-project-configuration-in-claude-code)), so a project can pick exclusions in its
+own settings file.
 
 ## Configuration reference
 
@@ -238,8 +236,6 @@ binary and Docker invocations alike. Precedence: the flag wins over its mirror, 
 | `--own-changes-only` | `GERRIT_MCP_OWN_CHANGES_ONLY` | `true`  | Refuse trail-leaving operations on changes not owned by the authenticated account |
 | `--include-tools`    | `GERRIT_MCP_INCLUDE_TOOLS`    | (empty) | Keep only the listed tools from the group-resolved set         |
 | `--exclude-tools`    | `GERRIT_MCP_EXCLUDE_TOOLS`    | (empty) | Remove the listed tools from the group-resolved set            |
-| `--review-notifications` | `GERRIT_MCP_REVIEW_NOTIFICATIONS` | `false` | Enable [review notifications](#review-notifications) |
-| `--review-notifications-poll-interval` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_POLL_INTERVAL` | `60s` | Poll cadence for subscribed changes, as a Go duration |
 | `--review-notifications-include-own` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN` | `false` | Keep the authenticated account's own activity in notifications |
 | `--review-notifications-exclude-accounts` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS` | (empty) | Accounts (usernames or numeric IDs) whose activity never becomes a notification |
 | `--review-notifications-exclude-patterns` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS` | (empty) | Comma-separated regular expressions; matching message or comment text never becomes a notification |
@@ -257,8 +253,8 @@ Notes:
 
 ## Output format
 
-Every tool responds in llmxml, an LLM-digestible subset of XML: line-structured, semantically tagged text meant to
-be read by a model. Attributes carry metadata; element bodies carry content:
+Every tool that a model reads responds in llmxml, an LLM-digestible subset of XML: line-structured, semantically
+tagged text. The one exception is `get_review_activity`, which returns JSON for the plugin that calls it. Attributes carry metadata; element bodies carry content:
 
 ```
 <changes query="status:open owner:self" start="0" count="1" more="false">

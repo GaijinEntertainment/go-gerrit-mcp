@@ -7,6 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 )
 
 // Tool names, referenced by the capability registry and tool filters.
@@ -16,11 +17,10 @@ const (
 	NameListChangeFiles   = "list_change_files"
 	NameGetFileDiff       = "get_file_diff"
 	NameGetChangeComments = "get_change_comments"
+	NameGetReviewActivity = "get_review_activity"
 	NamePostComments      = "post_comments"
 	NameSetVote           = "set_vote"
 	NameTransitionChange  = "transition_change"
-	NameSubscribeChange   = "subscribe_change"
-	NameUnsubscribeChange = "unsubscribe_change"
 )
 
 // Tool binds a tool name to its MCP registration.
@@ -30,14 +30,16 @@ type Tool struct {
 }
 
 // All returns every tool definition bound to the given client, in stable
-// order. Callers filter by the capability registry before registering.
-func All(c *gerritclient.Client) []Tool {
+// order. Callers filter by the capability registry before registering. The
+// filters apply to the activity that get_review_activity reports.
+func All(c *gerritclient.Client, filters notifications.Filters) []Tool {
 	return []Tool{
 		searchChanges(c),
 		getChange(c),
 		listChangeFiles(c),
 		getFileDiff(c),
 		getChangeComments(c),
+		getReviewActivity(c, filters),
 		postComments(c),
 		setVote(c),
 		transitionChange(c),

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,8 +37,9 @@ var (
 
 // Client is the process-wide authenticated Gerrit API client.
 type Client struct {
-	gerrit *gerrit.Client
-	self   gerrit.AccountInfo
+	gerrit  *gerrit.Client
+	baseURL string
+	self    gerrit.AccountInfo
 	// projects, when non-empty, confines every operation to the listed
 	// Gerrit projects (see docs/glossary.md: Project scoping).
 	projects []string
@@ -68,6 +70,7 @@ func New(ctx context.Context, cfg *config.Config) (*Client, error) {
 
 	return &Client{
 		gerrit:       g,
+		baseURL:      strings.TrimRight(cfg.GerritURL, "/"),
 		self:         *self,
 		projects:     cfg.Projects,
 		allowForeign: cfg.AllowForeignChanges,
@@ -77,6 +80,11 @@ func New(ctx context.Context, cfg *config.Config) (*Client, error) {
 // Self reports the authenticated account as validated at startup.
 func (c *Client) Self() gerrit.AccountInfo {
 	return c.self
+}
+
+// ChangeURL reports the web page of a change on the Gerrit instance.
+func (c *Client) ChangeURL(number int) string {
+	return c.baseURL + "/c/" + strconv.Itoa(number)
 }
 
 // Projects reports the project allowlist, empty when scoping is off.

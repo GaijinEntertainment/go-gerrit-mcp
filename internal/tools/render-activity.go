@@ -12,19 +12,11 @@ import (
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 )
 
-// NewDeltaRenderer returns the review-notifications payload renderer. It
-// lives here rather than in the notifications package because payloads
-// compose the vocabulary the read tools already emit — message and vote
-// elements, and comment threads byte-identical to get_change_comments.
-func NewDeltaRenderer() notifications.Renderer {
-	return deltaRenderer{}
-}
-
-type deltaRenderer struct{}
-
-// Render composes the self-sufficient review_activity payload plus routing
-// meta: nothing in it needs a follow-up fetch to act on.
-func (deltaRenderer) Render(d *notifications.Delta) (string, map[string]string) {
+// renderReviewActivity composes the self-sufficient review_activity block:
+// nothing in it needs a follow-up fetch to act on. It reuses the vocabulary
+// of the read tools: message and vote elements, and comment threads
+// byte-identical to get_change_comments.
+func renderReviewActivity(d *notifications.Delta) string {
 	root := llmxml.NewElement("review_activity",
 		llmxml.Attr("change", d.Change.Number),
 		llmxml.Attr("project", d.Change.Project),
@@ -51,31 +43,59 @@ func (deltaRenderer) Render(d *notifications.Delta) (string, map[string]string) 
 		).String())
 	}
 
-	if notifications.IsTerminal(d.Change.Status) {
-		children = append(children, llmxml.NewElement("subscription", llmxml.Attr("ended", true)).
-			WrapText("The change reached "+d.Change.Status+", so this subscription ended automatically; "+
-				"no further notifications for this change will arrive.").String())
-	}
-
-	content := root.String()
 	if len(children) > 0 {
-		content = root.WrapText(strings.Join(children, "\n")).String()
+		root.WrapText(strings.Join(children, "\n"))
 	}
 
-	return content, deltaMeta(d)
+	return root.String()
 }
 
-// RenderEnded implements the notice for a subscription ending on lost
-// access: unlike a terminal transition there is no fetched change to
-// compose from, only the number and the reason.
-func (deltaRenderer) RenderEnded(change int, reason string) (string, map[string]string) {
-	content := llmxml.NewElement("review_activity", llmxml.Attr("change", change)).
-		WrapText(llmxml.NewElement("subscription", llmxml.Attr("ended", true)).
-			WrapText("This subscription ended automatically: " + reason + ". " +
-				"No further notifications for this change will arrive.").String()).
-		String()
+// summarizeReviewActivity states in one line what the review_activity block
+// of the delta carries. The line holds counts, label names, vote values, and
+// statuses, and no text that a reviewer wrote, so a caller can show it or
+// submit it as its own words.
+func summarizeReviewActivity(d *notifications.Delta) string {
+	var parts []string
 
-	return content, map[string]string{"change": strconv.Itoa(change), "kind": "ended"}
+	if n := len(d.Messages); n > 0 {
+		parts = append(parts, counted(n, "message"))
+	}
+
+	for _, vote := range d.Votes {
+		value := strconv.Itoa(vote.Value)
+		if vote.Value > 0 {
+			value = "+" + value
+		}
+
+		parts = append(parts, vote.Label+" "+value)
+	}
+
+	if n := len(d.NewComments); n > 0 {
+		parts = append(parts, counted(n, "comment"))
+	}
+
+	if d.Transition != nil {
+		parts = append(parts, d.Transition.From+" -> "+d.Transition.To)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+func counted(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+
+	return strconv.Itoa(n) + " " + noun + "s"
+}
+
+// renderInaccessible composes the review_activity block of a change that the
+// account can no longer read: there is no fetched change to compose from,
+// only the number and the reason.
+func renderInaccessible(change int, reason string) string {
+	return llmxml.NewElement("review_activity", llmxml.Attr("change", change)).
+		WrapText(llmxml.NewElement("inaccessible").InlineText(reason).String()).
+		String()
 }
 
 // renderActivityMessage mirrors the message element of get_change, extended
@@ -162,33 +182,4 @@ func threadTouched(t thread, fresh map[string]bool) bool {
 	}
 
 	return false
-}
-
-// deltaMeta builds the routing meta of a notification: the change number,
-// its project, and the activity kinds the payload carries. Keys stay within
-// the channel contract's letters-digits-underscores restriction.
-func deltaMeta(d *notifications.Delta) map[string]string {
-	var kinds []string
-
-	if len(d.Messages) > 0 {
-		kinds = append(kinds, "message")
-	}
-
-	if len(d.Votes) > 0 {
-		kinds = append(kinds, "vote")
-	}
-
-	if len(d.NewComments) > 0 {
-		kinds = append(kinds, "comment")
-	}
-
-	if d.Transition != nil {
-		kinds = append(kinds, "transition")
-	}
-
-	return map[string]string{
-		"change":  strconv.Itoa(d.Change.Number),
-		"project": d.Change.Project,
-		"kind":    strings.Join(kinds, ","),
-	}
 }
