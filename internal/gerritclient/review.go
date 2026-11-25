@@ -36,10 +36,6 @@ func (c *Client) checkWriteScope(ctx context.Context, changeID string) error {
 		return ErrGetChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
 
-	if info == nil {
-		return ErrGetChange.Wrap(errEmptyResponse, fields.F("change", changeID))
-	}
-
 	if !c.projectAllowed(info.Project) {
 		return c.scopeError(changeID, info.Project)
 	}
@@ -72,10 +68,6 @@ func (c *Client) SetReview(
 	res, resp, err := c.gerrit.Changes.SetReview(ctx, changeID, revision, input)
 	if err != nil {
 		return nil, ErrSetReview.Wrap(apiError(resp, err), fields.F("change", changeID))
-	}
-
-	if res == nil {
-		return nil, ErrSetReview.Wrap(errEmptyResponse, fields.F("change", changeID))
 	}
 
 	return res, nil

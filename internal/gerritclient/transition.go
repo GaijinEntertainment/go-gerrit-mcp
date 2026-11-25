@@ -31,10 +31,6 @@ func (c *Client) SubmitChange(ctx context.Context, changeID string) (*gerrit.Cha
 		return nil, ErrSubmitChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
 
-	if info == nil {
-		return nil, ErrSubmitChange.Wrap(errEmptyResponse, fields.F("change", changeID))
-	}
-
 	return info, nil
 }
 
@@ -51,10 +47,6 @@ func (c *Client) AbandonChange(ctx context.Context, changeID, message string) (*
 		return nil, ErrAbandonChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
 
-	if info == nil {
-		return nil, ErrAbandonChange.Wrap(errEmptyResponse, fields.F("change", changeID))
-	}
-
 	return info, nil
 }
 
@@ -69,10 +61,6 @@ func (c *Client) RestoreChange(ctx context.Context, changeID, message string) (*
 	info, resp, err := c.gerrit.Changes.RestoreChange(ctx, changeID, &gerrit.RestoreInput{Message: message})
 	if err != nil {
 		return nil, ErrRestoreChange.Wrap(apiError(resp, err), fields.F("change", changeID))
-	}
-
-	if info == nil {
-		return nil, ErrRestoreChange.Wrap(errEmptyResponse, fields.F("change", changeID))
 	}
 
 	return info, nil

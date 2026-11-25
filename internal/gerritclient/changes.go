@@ -58,10 +58,6 @@ func (c *Client) GetChange(ctx context.Context, id string) (*gerrit.ChangeInfo, 
 		return nil, ErrGetChange.Wrap(apiError(resp, err), fields.F("change", id))
 	}
 
-	if info == nil {
-		return nil, ErrGetChange.Wrap(errEmptyResponse, fields.F("change", id))
-	}
-
 	if !c.projectAllowed(info.Project) {
 		return nil, c.scopeError(id, info.Project)
 	}
@@ -174,10 +170,6 @@ func (c *Client) checkProjectScope(ctx context.Context, changeID string) error {
 		return ErrGetChange.Wrap(apiError(resp, err), fields.F("change", changeID))
 	}
 
-	if info == nil {
-		return c.scopeError(changeID, "")
-	}
-
 	if !c.projectAllowed(info.Project) {
 		return c.scopeError(changeID, info.Project)
 	}
@@ -205,10 +197,6 @@ func (c *Client) QueryChanges(ctx context.Context, query string, limit, start in
 	res, resp, err := c.gerrit.Changes.QueryChanges(ctx, opt)
 	if err != nil {
 		return nil, ErrQueryChanges.Wrap(apiError(resp, err), fields.F("query", query))
-	}
-
-	if res == nil {
-		return nil, ErrQueryChanges.Wrap(errEmptyResponse, fields.F("query", query))
 	}
 
 	changes := *res
@@ -264,10 +252,6 @@ func (c *Client) GetDiff(ctx context.Context, changeID, revision, path string) (
 		return nil, ErrGetDiff.Wrap(apiError(resp, err), ff...)
 	}
 
-	if diff == nil {
-		return nil, ErrGetDiff.Wrap(errEmptyResponse, fields.F("change", changeID), fields.F("file", path))
-	}
-
 	return diff, nil
 }
 
@@ -281,10 +265,6 @@ func (c *Client) ListChangeComments(ctx context.Context, changeID string) (map[s
 	comments, resp, err := c.gerrit.Changes.ListChangeComments(ctx, changeID)
 	if err != nil {
 		return nil, ErrListComments.Wrap(apiError(resp, err), fields.F("change", changeID))
-	}
-
-	if comments == nil {
-		return nil, ErrListComments.Wrap(errEmptyResponse, fields.F("change", changeID))
 	}
 
 	return *comments, nil
@@ -301,10 +281,6 @@ func (c *Client) ListChangeDrafts(ctx context.Context, changeID string) (map[str
 	drafts, resp, err := c.gerrit.Changes.ListChangeDrafts(ctx, changeID)
 	if err != nil {
 		return nil, ErrListDrafts.Wrap(apiError(resp, err), fields.F("change", changeID))
-	}
-
-	if drafts == nil {
-		return nil, ErrListDrafts.Wrap(errEmptyResponse, fields.F("change", changeID))
 	}
 
 	return *drafts, nil
