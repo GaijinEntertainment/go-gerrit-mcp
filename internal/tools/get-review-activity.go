@@ -9,8 +9,8 @@ import (
 	"dev.gaijin.team/go/golib/fields"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 )
 
 var (
@@ -43,7 +43,7 @@ type reviewActivityEntry struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func getReviewActivity(c *gerritclient.Client, filters notifications.Filters) Tool {
+func getReviewActivity(c *gerritclient.Client, filters activity.Filters) Tool {
 	return Tool{
 		Name: NameGetReviewActivity,
 		Register: func(s *mcp.Server) {
@@ -69,14 +69,14 @@ func getReviewActivity(c *gerritclient.Client, filters notifications.Filters) To
 					return nil, nil, err
 				}
 
-				activities, err := notifications.CollectActivity(ctx, c, filters, reqs)
+				reports, err := activity.Collect(ctx, c, filters, reqs)
 				if err != nil {
 					return nil, nil, err
 				}
 
-				out := reviewActivityOutput{Changes: make([]reviewActivityEntry, 0, len(activities))}
-				for _, act := range activities {
-					out.Changes = append(out.Changes, reviewActivityEntryOf(act, c.ChangeURL(act.Change)))
+				out := reviewActivityOutput{Changes: make([]reviewActivityEntry, 0, len(reports))}
+				for _, report := range reports {
+					out.Changes = append(out.Changes, reviewActivityEntryOf(report, c.ChangeURL(report.Change)))
 				}
 
 				text, err := json.Marshal(out)
@@ -90,11 +90,11 @@ func getReviewActivity(c *gerritclient.Client, filters notifications.Filters) To
 	}
 }
 
-func activityRequests(in []reviewActivityRequest) ([]notifications.ActivityRequest, error) {
-	reqs := make([]notifications.ActivityRequest, len(in))
+func activityRequests(in []reviewActivityRequest) ([]activity.Request, error) {
+	reqs := make([]activity.Request, len(in))
 
 	for i, r := range in {
-		reqs[i] = notifications.ActivityRequest{Change: r.Change, Since: time.Time{}, Status: r.Status}
+		reqs[i] = activity.Request{Change: r.Change, Since: time.Time{}, Status: r.Status}
 
 		if r.Since == "" {
 			continue
@@ -115,32 +115,32 @@ func activityRequests(in []reviewActivityRequest) ([]notifications.ActivityReque
 	return reqs, nil
 }
 
-func reviewActivityEntryOf(act notifications.Activity, url string) reviewActivityEntry {
+func reviewActivityEntryOf(report activity.Report, url string) reviewActivityEntry {
 	entry := reviewActivityEntry{
-		Change:  act.Change,
+		Change:  report.Change,
 		URL:     url,
 		Since:   "",
-		Status:  act.Status,
-		Ended:   act.Inaccessible != "" || notifications.IsTerminal(act.Status),
+		Status:  report.Status,
+		Ended:   report.Inaccessible != "" || activity.IsTerminal(report.Status),
 		Summary: "",
 		Content: "",
 		Error:   "",
 	}
 
-	if !act.Updated.IsZero() {
-		entry.Since = act.Updated.UTC().Format(time.RFC3339Nano)
+	if !report.Updated.IsZero() {
+		entry.Since = report.Updated.UTC().Format(time.RFC3339Nano)
 	}
 
 	switch {
-	case act.Err != nil:
-		entry.Error = act.Err.Error()
-	case act.Inaccessible != "":
-		entry.Summary = act.Inaccessible
-		entry.Content = renderInaccessible(act.Change, act.Inaccessible)
+	case report.Err != nil:
+		entry.Error = report.Err.Error()
+	case report.Inaccessible != "":
+		entry.Summary = report.Inaccessible
+		entry.Content = renderInaccessible(report.Change, report.Inaccessible)
 
-	case act.Delta != nil:
-		entry.Summary = summarizeReviewActivity(act.Delta)
-		entry.Content = renderReviewActivity(act.Delta)
+	case report.Delta != nil:
+		entry.Summary = summarizeReviewActivity(report.Delta)
+		entry.Content = renderReviewActivity(report.Delta)
 
 	default:
 	}

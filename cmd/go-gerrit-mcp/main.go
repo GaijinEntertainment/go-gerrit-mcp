@@ -13,9 +13,9 @@ import (
 	"dev.gaijin.team/go/golib/e"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/config"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/registry"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
@@ -97,7 +97,7 @@ func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Tra
 		return nil, err
 	}
 
-	filters := notifications.Filters{
+	filters := activity.Filters{
 		Self:            client.Self(),
 		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
 		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,

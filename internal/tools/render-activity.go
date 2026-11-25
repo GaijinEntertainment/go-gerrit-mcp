@@ -8,15 +8,15 @@ import (
 
 	gerrit "github.com/andygrunwald/go-gerrit"
 
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/llmxml"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 )
 
 // renderReviewActivity composes the self-sufficient review_activity block:
 // nothing in it needs a follow-up fetch to act on. It reuses the vocabulary
 // of the read tools: message and vote elements, and comment threads
 // byte-identical to get_change_comments.
-func renderReviewActivity(d *notifications.Delta) string {
+func renderReviewActivity(d *activity.Delta) string {
 	root := llmxml.NewElement("review_activity",
 		llmxml.Attr("change", d.Change.Number),
 		llmxml.Attr("project", d.Change.Project),
@@ -54,7 +54,7 @@ func renderReviewActivity(d *notifications.Delta) string {
 // of the delta carries. The line holds counts, label names, vote values, and
 // statuses, and no text that a reviewer wrote, so a caller can show it or
 // submit it as its own words.
-func summarizeReviewActivity(d *notifications.Delta) string {
+func summarizeReviewActivity(d *activity.Delta) string {
 	var parts []string
 
 	if n := len(d.Messages); n > 0 {
@@ -119,7 +119,7 @@ func renderActivityMessage(msg gerrit.ChangeMessageInfo) string {
 
 // renderActivityVote mirrors the vote element of get_change's label
 // rendering, extended with the label name and the vote date.
-func renderActivityVote(v notifications.Vote) string {
+func renderActivityVote(v activity.Vote) string {
 	return llmxml.NewElement("vote",
 		llmxml.Attr("label", v.Label),
 		llmxml.Attr("value", v.Value),
@@ -130,7 +130,7 @@ func renderActivityVote(v notifications.Vote) string {
 
 // renderActivityThreads renders every thread touched by a new comment as
 // get_change_comments renders threads.
-func renderActivityThreads(d *notifications.Delta) []string {
+func renderActivityThreads(d *activity.Delta) []string {
 	if len(d.NewComments) == 0 {
 		return nil
 	}

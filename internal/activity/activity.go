@@ -1,7 +1,7 @@
-// Package notifications computes the review activity behind the
-// review-notifications feature: what is new on a Gerrit change past a point
-// that the caller keeps (see docs/glossary.md: Review notifications).
-package notifications
+// Package activity computes the review activity of Gerrit changes: what is
+// new on a change past a point that the caller keeps (see docs/glossary.md:
+// Review activity).
+package activity
 
 import (
 	"context"
@@ -16,10 +16,10 @@ import (
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
 )
 
-// ActivityRequest asks for one change's review activity past the point a
+// Request asks for one change's review activity past the point a
 // previous report reached. The caller keeps that point; a zero Since asks
 // for the starting point and reports no activity.
-type ActivityRequest struct {
+type Request struct {
 	Change int
 	// Since is the Updated value of the previous report for this change.
 	Since time.Time
@@ -27,8 +27,8 @@ type ActivityRequest struct {
 	Status string
 }
 
-// Activity is the outcome for one requested change.
-type Activity struct {
+// Report is the outcome for one requested change.
+type Report struct {
 	Change int
 	// Updated and Status are the Since and Status of the next request. They
 	// repeat the request's values when the change was not read.
@@ -44,16 +44,16 @@ type Activity struct {
 	Err error
 }
 
-// CollectActivity reports the review activity of every requested change past
+// Collect reports the review activity of every requested change past
 // its Since. It keeps no state: one batched query covers all requests, and
 // a detail fetch goes only to a change whose updated timestamp moved past its
 // Since or that the query did not list.
-func CollectActivity(
-	ctx context.Context, client *gerritclient.Client, filters Filters, reqs []ActivityRequest,
-) ([]Activity, error) {
-	activities := make([]Activity, len(reqs))
+func Collect(
+	ctx context.Context, client *gerritclient.Client, filters Filters, reqs []Request,
+) ([]Report, error) {
+	reports := make([]Report, len(reqs))
 	if len(reqs) == 0 {
-		return activities, nil
+		return reports, nil
 	}
 
 	res, err := client.QueryChanges(ctx, batchQuery(reqs), len(reqs), 0)
@@ -67,10 +67,10 @@ func CollectActivity(
 	}
 
 	for i, req := range reqs {
-		activities[i] = collectOne(ctx, client, filters, req, listed[req.Change])
+		reports[i] = collectOne(ctx, client, filters, req, listed[req.Change])
 	}
 
-	return activities, nil
+	return reports, nil
 }
 
 // collectOne reads one change. The batched query answers a request without
@@ -78,9 +78,9 @@ func CollectActivity(
 // still gets the detail fetch: query staleness must not read as lost access,
 // so only a classified access failure does.
 func collectOne(
-	ctx context.Context, client *gerritclient.Client, filters Filters, req ActivityRequest, listed *gerrit.ChangeInfo,
-) Activity {
-	act := Activity{
+	ctx context.Context, client *gerritclient.Client, filters Filters, req Request, listed *gerrit.ChangeInfo,
+) Report {
+	report := Report{
 		Change:       req.Change,
 		Updated:      req.Since,
 		Status:       req.Status,
@@ -91,13 +91,13 @@ func collectOne(
 
 	if listed != nil {
 		if req.Since.IsZero() {
-			act.Updated, act.Status = listed.Updated.Time, listed.Status
+			report.Updated, report.Status = listed.Updated.Time, listed.Status
 
-			return act
+			return report
 		}
 
 		if !listed.Updated.After(req.Since) {
-			return act
+			return report
 		}
 	}
 
@@ -105,47 +105,47 @@ func collectOne(
 
 	info, err := client.GetChange(ctx, id)
 	if err != nil {
-		return act.unread(err)
+		return report.unread(err)
 	}
 
 	if req.Since.IsZero() {
-		act.Updated, act.Status = info.Updated.Time, info.Status
+		report.Updated, report.Status = info.Updated.Time, info.Status
 
-		return act
+		return report
 	}
 
 	if !info.Updated.After(req.Since) {
-		return act
+		return report
 	}
 
 	comments, err := client.ListChangeComments(ctx, id)
 	if err != nil {
-		return act.unread(err)
+		return report.unread(err)
 	}
 
 	delta := extractDelta(req.Since, req.Status, info, comments)
 
 	filters.apply(delta)
 
-	act.Updated, act.Status = info.Updated.Time, info.Status
+	report.Updated, report.Status = info.Updated.Time, info.Status
 
 	if !delta.Empty() {
-		act.Delta = delta
+		report.Delta = delta
 	}
 
-	return act
+	return report
 }
 
-func (a Activity) unread(err error) Activity {
+func (r Report) unread(err error) Report {
 	if reason, isGone := inaccessibleReason(err); isGone {
-		a.Inaccessible = reason
+		r.Inaccessible = reason
 
-		return a
+		return r
 	}
 
-	a.Err = err
+	r.Err = err
 
-	return a
+	return r
 }
 
 // inaccessibleReason classifies an error as one that ends the reporting on a
@@ -166,7 +166,7 @@ func inaccessibleReason(err error) (string, bool) {
 
 // batchQuery composes one change:A OR change:B query, so a report costs a
 // single request regardless of the number of changes.
-func batchQuery(reqs []ActivityRequest) string {
+func batchQuery(reqs []Request) string {
 	clauses := make([]string, len(reqs))
 	for i, req := range reqs {
 		clauses[i] = "change:" + strconv.Itoa(req.Change)

@@ -80,6 +80,14 @@ JSON whose `content` field is llmxml.
 namespaces, no round-tripping); JSON output / structured output for a tool that a model reads (MCP-ecosystem default
 assumption; such a tool deliberately emits text for model consumption, not a machine-parseable payload).
 
+### Review activity
+
+What is new on a Gerrit change past a point that the caller keeps: change messages, votes, inline comment threads, and
+a status transition. The server reports it through `get_review_activity` when asked and keeps no state; delivering it
+into a session is a client's job.
+**Avoid:** notification / review notification for the server side (the server notifies nobody — it answers a pull;
+only the plugin delivers [review notifications](#review-notifications)).
+
 ### Review notifications
 
 The feature that puts new review activity on subscribed changes into the agent's session. A Claude Code plugin polls

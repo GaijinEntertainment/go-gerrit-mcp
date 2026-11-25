@@ -6,8 +6,8 @@ package tools
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 )
 
 // Tool names, referenced by the capability registry and tool filters.
@@ -32,7 +32,7 @@ type Tool struct {
 // All returns every tool definition bound to the given client, in stable
 // order. Callers filter by the capability registry before registering. The
 // filters apply to the activity that get_review_activity reports.
-func All(c *gerritclient.Client, filters notifications.Filters) []Tool {
+func All(c *gerritclient.Client, filters activity.Filters) []Tool {
 	return []Tool{
 		searchChanges(c),
 		getChange(c),
