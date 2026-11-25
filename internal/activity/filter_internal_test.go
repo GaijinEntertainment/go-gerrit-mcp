@@ -1,4 +1,4 @@
-package notifications
+package activity
 
 import (
 	"regexp"
@@ -137,5 +137,5 @@ func Test_Filters_FullyFilteredDeltaIsEmpty(t *testing.T) {
 		ExcludeAccounts: []string{"ci"},
 	}.apply(d)
 
-	assert.True(t, d.Empty(), "a tick filtered to nothing must produce no notification")
+	assert.True(t, d.Empty(), "a delta filtered to nothing must report no activity")
 }

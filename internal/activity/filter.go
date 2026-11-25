@@ -1,4 +1,4 @@
-package notifications
+package activity
 
 import (
 	"regexp"
@@ -12,13 +12,13 @@ import (
 // never reach the model. Noise control is operator configuration, not server
 // heuristics: nothing is filtered by message tag, because a bot's verdict is
 // often exactly the awaited outcome (ADR 2.2). Status transitions are never
-// filtered — the lifecycle of a subscribed change always reaches the
-// session. The zero value filters nothing.
+// filtered — the lifecycle of a requested change is always reported. The
+// zero value filters nothing.
 //
 //exhaustruct:optional
 type Filters struct {
 	// Self is the authenticated account. Its own activity is dropped unless
-	// IncludeOwn — the session's author rarely needs an echo of itself.
+	// IncludeOwn — the account rarely needs an echo of its own activity.
 	Self gerrit.AccountInfo
 	// IncludeOwn keeps the authenticated account's own activity.
 	IncludeOwn bool

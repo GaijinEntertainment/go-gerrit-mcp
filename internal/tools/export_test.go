@@ -1,16 +1,16 @@
 package tools
 
-import "dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
+import "dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 
 // ReviewActivityBlock exposes renderReviewActivity to the black-box golden
 // tests.
-func ReviewActivityBlock(d *notifications.Delta) string {
+func ReviewActivityBlock(d *activity.Delta) string {
 	return renderReviewActivity(d)
 }
 
 // ReviewActivitySummary exposes summarizeReviewActivity to the black-box
 // tests.
-func ReviewActivitySummary(d *notifications.Delta) string {
+func ReviewActivitySummary(d *activity.Delta) string {
 	return summarizeReviewActivity(d)
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
 
@@ -35,10 +35,10 @@ func activityChange(t *testing.T) *gerrit.ChangeInfo {
 	}
 }
 
-func emptyDelta(t *testing.T) *notifications.Delta {
+func emptyDelta(t *testing.T) *activity.Delta {
 	t.Helper()
 
-	return &notifications.Delta{
+	return &activity.Delta{
 		Change:      activityChange(t),
 		Messages:    nil,
 		Votes:       nil,
@@ -113,7 +113,7 @@ func Test_RenderReviewActivity(t *testing.T) {
 
 		d := emptyDelta(t)
 
-		d.Votes = []notifications.Vote{
+		d.Votes = []activity.Vote{
 			{
 				Label: "Code-Review", Value: 2,
 				Voter: gerrit.AccountInfo{Name: "Bob", Username: "bob"},
@@ -151,7 +151,7 @@ func Test_RenderReviewActivity(t *testing.T) {
 		d := emptyDelta(t)
 
 		d.Change.Status = "ABANDONED"
-		d.Transition = &notifications.Transition{From: "NEW", To: "ABANDONED"}
+		d.Transition = &activity.Transition{From: "NEW", To: "ABANDONED"}
 
 		golden(t, "render-activity-transition", tools.ReviewActivityBlock(d))
 	})
@@ -169,7 +169,7 @@ func Test_RenderReviewActivity(t *testing.T) {
 				Tag: "", RevisionNumber: 2,
 			},
 		}
-		d.Votes = []notifications.Vote{
+		d.Votes = []activity.Vote{
 			{
 				Label: "Code-Review", Value: 2,
 				Voter: gerrit.AccountInfo{Name: "Bob", Username: "bob"},
@@ -178,7 +178,7 @@ func Test_RenderReviewActivity(t *testing.T) {
 		}
 		d.Comments = activityComments(t)
 		d.NewComments = map[string]bool{"c2": true}
-		d.Transition = &notifications.Transition{From: "NEW", To: "MERGED"}
+		d.Transition = &activity.Transition{From: "NEW", To: "MERGED"}
 
 		golden(t, "render-activity-mixed", tools.ReviewActivityBlock(d))
 		assert.Equal(t, "1 message, Code-Review +2, 1 comment, NEW -> MERGED", tools.ReviewActivitySummary(d),

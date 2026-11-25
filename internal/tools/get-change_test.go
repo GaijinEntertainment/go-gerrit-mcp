@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"dev.gaijin.team/go/go-gerrit-mcp/internal/activity"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/config"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/gerritclient"
-	"dev.gaijin.team/go/go-gerrit-mcp/internal/notifications"
 	"dev.gaijin.team/go/go-gerrit-mcp/internal/tools"
 )
 
@@ -76,7 +76,7 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
 	mcpServer.AddReceivingMiddleware(tools.WrapErrors)
 
-	filters := notifications.Filters{
+	filters := activity.Filters{
 		Self:            client.Self(),
 		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
 		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,

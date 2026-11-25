@@ -1,4 +1,4 @@
-package notifications
+package activity
 
 import (
 	"maps"
@@ -56,7 +56,7 @@ type Delta struct {
 	Transition *Transition
 }
 
-// Empty reports whether the delta carries nothing to notify about.
+// Empty reports whether the delta carries no activity to report.
 func (d *Delta) Empty() bool {
 	return len(d.Messages) == 0 && len(d.Votes) == 0 && len(d.NewComments) == 0 && d.Transition == nil
 }
