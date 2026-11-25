@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -100,7 +101,50 @@ func Test_Assemble(t *testing.T) {
 	assert.Equal(t, instructions, init.Instructions)
 	assert.Empty(t, init.Capabilities.Experimental, "the server declares no experimental capability")
 
-	assert.ElementsMatch(t, readGroupTools(), toolNames(t, session))
+	assert.ElementsMatch(t, append(readGroupTools(), "get_server_info"), toolNames(t, session))
+}
+
+func Test_GetServerInfo(t *testing.T) {
+	t.Parallel()
+
+	client := testGerritClient(t, selfOnlyHandler)
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	cfg := testConfig()
+
+	cfg.ExcludeTools = []string{"get_review_activity"}
+
+	s, err := assemble(cfg, client, serverTransport)
+	require.NoError(t, err)
+
+	_, err = s.mcp.Connect(t.Context(), s.transport, nil)
+	require.NoError(t, err)
+
+	session := connectClient(t, clientTransport)
+
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "get_server_info"})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, res.Content, 1)
+
+	text, ok := res.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+
+	var got map[string]any
+
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &got))
+
+	assert.Equal(t, map[string]any{
+		"name":             "go-gerrit-mcp",
+		"version":          serverVersion(),
+		"protocol_version": session.InitializeResult().ProtocolVersion,
+		"account":          "bot",
+		"groups":           []any{"read"},
+		"tools": []any{
+			"search_changes", "get_change", "list_change_files", "get_file_diff", "get_change_comments",
+		},
+	}, got)
 }
 
 func connectClient(t *testing.T, transport mcp.Transport) *mcp.ClientSession {

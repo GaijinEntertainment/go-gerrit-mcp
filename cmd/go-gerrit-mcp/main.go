@@ -34,7 +34,7 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 	"the operator enabled are listed, and writes may be restricted to changes owned by this account or to " +
 	"an allowlist of projects — refusals and errors name what to correct, and often carry did_you_mean " +
 	"proposals or hints worth following. Tool output is XML-like text addressed to you; get_review_activity " +
-	"alone returns JSON, addressed to a program."
+	"and get_server_info return JSON, addressed to a program."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"
@@ -121,6 +121,20 @@ func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Tra
 			t.Register(srv)
 		}
 	}
+
+	groups := make([]string, len(cfg.Groups))
+	for i, g := range cfg.Groups {
+		groups[i] = string(g)
+	}
+
+	tools.GetServerInfo(tools.ServerInfo{
+		Name:     serverName,
+		Version:  serverVersion(),
+		Account:  client.Self().Username,
+		Groups:   groups,
+		Tools:    enabled,
+		Projects: client.Projects(),
+	}).Register(srv)
 
 	return &server{mcp: srv, transport: transport, tools: enabled}, nil
 }

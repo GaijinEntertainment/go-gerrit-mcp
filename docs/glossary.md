@@ -74,8 +74,8 @@ disable flags (suggests per-tool switches independent of groups; filters are sub
 
 The output format of every tool that a model reads: an LLM-digestible subset of XML — line-structured, semantically
 tagged text, with no transport or deserialization role and no indentation. Emitted by a purpose-built renderer; there
-is no schema and no consumer that parses it back. The one tool that a program reads, `get_review_activity`, returns
-JSON whose `content` field is llmxml.
+is no schema and no consumer that parses it back. The tools that a program reads, `get_review_activity` and
+`get_server_info`, return JSON; the `content` field of `get_review_activity` is llmxml.
 **Avoid:** XML (implies spec compliance and `encoding/xml` serialization — explicitly rejected; no declaration, no
 namespaces, no round-tripping); JSON output / structured output for a tool that a model reads (MCP-ecosystem default
 assumption; such a tool deliberately emits text for model consumption, not a machine-parseable payload).

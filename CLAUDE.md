@@ -24,8 +24,8 @@ Use it before naming anything user-facing.
 
 ## Constraints
 
-- Tool output is llmxml (ADR 1.3) — never `encoding/xml`. JSON output only from `get_review_activity`, which a program
-  reads.
+- Tool output is llmxml (ADR 1.3) — never `encoding/xml`. JSON output only from `get_review_activity` and
+  `get_server_info`, which a program reads.
 - Safety defaults are contractual (ADR 1.2): zero config = `read` group only; `--own-changes-only` defaults to `true`.
 - Dependencies: add only when needed, always at the latest published version — never versions from memory.
 - `design-docs/` and `docs/` ship publicly — no internal hostnames, local paths, or company-internal references.
