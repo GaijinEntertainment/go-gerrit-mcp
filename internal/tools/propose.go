@@ -1,8 +1,12 @@
 package tools
 
 import (
+	"maps"
 	"slices"
 	"strings"
+
+	"dev.gaijin.team/go/golib/e"
+	gerrit "github.com/andygrunwald/go-gerrit"
 )
 
 // proposalLimit caps how many did-you-mean candidates an error carries.
@@ -60,6 +64,16 @@ func proposals(input string, candidates []string) []string {
 	}
 
 	return out
+}
+
+// withNearestFiles adds to a refusal about file the paths of files closest
+// to it, or the hint when no path is close.
+func withNearestFiles(res *e.Err, file string, files map[string]gerrit.FileInfo, hint string) error {
+	if near := proposals(file, slices.Sorted(maps.Keys(files))); len(near) > 0 {
+		return res.WithField("did_you_mean", strings.Join(near, ", "))
+	}
+
+	return res.WithField("hint", hint)
 }
 
 // editDistance is the rune-wise Levenshtein distance between a and b.

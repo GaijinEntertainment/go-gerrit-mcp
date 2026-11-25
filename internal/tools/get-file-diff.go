@@ -72,16 +72,7 @@ func checkDiffFile(ctx context.Context, c *gerritclient.Client, in getFileDiffIn
 		fields.F("file", in.File),
 	)
 
-	paths := make([]string, 0, len(files))
-	for path := range files {
-		paths = append(paths, path)
-	}
-
-	if near := proposals(in.File, paths); len(near) > 0 {
-		return res.WithField("did_you_mean", strings.Join(near, ", "))
-	}
-
-	return res.WithField("hint", "list_change_files names the files of the revision")
+	return withNearestFiles(res, in.File, files, "list_change_files names the files of the revision")
 }
 
 func renderDiff(in getFileDiffInput, diff *gerrit.DiffInfo) string {
