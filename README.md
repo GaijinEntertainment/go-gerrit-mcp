@@ -61,7 +61,8 @@ The server reads connection identity from environment variables only; credential
 | `GERRIT_TOKEN`    | HTTP credential paired with the username           |
 
 Generate the credential in Gerrit under **Settings → HTTP Credentials** (an HTTP password, or an auth token on
-instances that issue them). All three variables are required; the server exits with an error naming the missing ones.
+instances that issue them). All three variables are required. A server without them, with credentials that Gerrit rejects, or with no Gerrit
+to reach at startup stays up with `get_server_info` only, which names the cause; fix it and restart the server.
 
 ### Claude Code
 
@@ -183,8 +184,9 @@ own, and enabled groups union.
   threads only by default; `status=all` fetches the full history, `status=resolved` the settled threads.
 - `get_review_activity`: new review activity on a list of changes past a point that the caller keeps, as JSON for
   a program. The server keeps no state. The [review notifications](#review-notifications) plugin calls it.
-- `get_server_info`: the server name and version, the MCP protocol version, the Gerrit account, and the enabled
-  groups, tools, and project scope, as JSON for a program.
+- `get_server_info`: the server name and version, the MCP protocol version, the `state` (`ready`, `not_configured`,
+  `credentials_rejected`, or `unreachable`, with a `reason` when it is not ready), the Gerrit account, and the
+  enabled groups, tools, and project scope, as JSON for a program.
 - `post_comments`: publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments. Replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote`: set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.
@@ -257,7 +259,8 @@ Notes:
 - Tool filters only narrow. `--exclude-tools` removes tools from what the groups resolved; `--include-tools` keeps
   only the listed subset of it. A tool outside the enabled groups can never be activated by a filter, and exclude
   wins over include. Filter entries naming no known tool fail startup, so misconfigurations surface immediately.
-- Configuration errors are aggregated: the server reports every problem at once, then exits non-zero.
+- Configuration errors are aggregated: the server reports every problem at once, then exits non-zero. The Gerrit
+  connection is not a configuration error: see [Quick start](#quick-start).
 
 ## Output format
 

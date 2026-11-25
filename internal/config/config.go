@@ -40,7 +40,6 @@ const (
 )
 
 var (
-	errEnvMissing     = e.New("required environment variable is not set")
 	errUnknownGroups  = e.New("unknown capability groups")
 	errNoGroups       = e.New("no capability groups enabled")
 	errParseFlags     = e.New("parse flags")
@@ -95,7 +94,8 @@ type behaviorFlag struct {
 }
 
 // Load resolves configuration from CLI arguments and the environment.
-// It reports every configuration error at once.
+// It reports every configuration error at once. Unset connection variables
+// are not an error: [Config.MissingEnv] names them.
 func Load(args []string, getenv func(string) string) (*Config, error) {
 	groups := behaviorFlag{
 		name:     "groups",
@@ -169,7 +169,7 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		ActivityExcludePatterns: nil,
 	}
 
-	errs := missingEnv(cfg)
+	var errs []error
 
 	ownOnly, err := parseBool(ownChanges)
 	if err != nil {
@@ -237,20 +237,22 @@ func resolveFlags(args []string, getenv func(string) string, flags []*behaviorFl
 	return nil
 }
 
-func missingEnv(cfg *Config) []error {
-	var errs []error
+// MissingEnv names the unset connection variables, empty when the server
+// has everything it needs to reach Gerrit.
+func (c *Config) MissingEnv() []string {
+	var missing []string
 
 	for _, v := range []struct{ name, value string }{
-		{EnvURL, cfg.GerritURL},
-		{EnvUsername, cfg.Username},
-		{EnvToken, cfg.Token},
+		{EnvURL, c.GerritURL},
+		{EnvUsername, c.Username},
+		{EnvToken, c.Token},
 	} {
 		if v.value == "" {
-			errs = append(errs, errEnvMissing.WithField("name", v.name))
+			missing = append(missing, v.name)
 		}
 	}
 
-	return errs
+	return missing
 }
 
 // parseBool parses a resolved boolean flag value, naming the flag and the
