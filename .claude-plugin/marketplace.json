@@ -1,0 +1,12 @@
+{
+	"name": "go-gerrit-mcp",
+	"owner": {
+		"name": "xobotyi"
+	},
+	"plugins": [
+		{
+			"name": "gerrit-review-notifications",
+			"source": "./plugins/gerrit-review-notifications"
+		}
+	]
+}

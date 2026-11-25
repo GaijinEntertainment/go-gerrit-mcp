@@ -31,19 +31,8 @@ const instructions = "Gerrit code review over MCP. A Gerrit change is one commit
 	"inline discussion; post_comments, set_vote, and transition_change act on the review. Only the tools " +
 	"the operator enabled are listed, and writes may be restricted to changes owned by this account or to " +
 	"an allowlist of projects — refusals and errors name what to correct, and often carry did_you_mean " +
-	"proposals or hints worth following. All tool output is XML-like text addressed to you."
-
-// notificationsInstructions is appended to the instructions only when review
-// notifications are enabled; the zero-config instructions stay byte-identical.
-const notificationsInstructions = " Review notifications are enabled in this session. Right after pushing " +
-	"a change for review, or whenever a review outcome you depend on is pending — an approval, a CI " +
-	"verdict, a reviewer's reply — call subscribe_change once; new activity on that change then arrives " +
-	"here on its own as review_activity blocks carrying the change messages, votes, inline comment " +
-	"threads, and status transitions themselves, so never poll the read tools for a subscribed change. " +
-	"When a subscribed change is merged or abandoned, a final notification announces it and the " +
-	"subscription ends by itself; unsubscribe_change ends one earlier. Subscriptions are per-session and " +
-	"in-memory — nothing is visible on Gerrit, and after a restart of this server you must subscribe " +
-	"again."
+	"proposals or hints worth following. Tool output is XML-like text addressed to you; get_review_activity " +
+	"alone returns JSON, addressed to a program."
 
 // version is stamped by the release pipeline via ldflags.
 var version = "dev"
@@ -71,7 +60,7 @@ func run(lgr *slog.Logger) error {
 		return err
 	}
 
-	s, err := assemble(cfg, client, &mcp.StdioTransport{}, lgr)
+	s, err := assemble(cfg, client, &mcp.StdioTransport{})
 	if err != nil {
 		return err
 	}
@@ -85,27 +74,21 @@ func run(lgr *slog.Logger) error {
 	return s.run(ctx)
 }
 
-// server is an assembled MCP server: the transport it runs over, the names
-// of the tools it registered, and the notifications poller when review
-// notifications are enabled.
+// server is an assembled MCP server: the transport it runs over and the
+// names of the tools it registered.
 type server struct {
 	mcp       *mcp.Server
 	transport mcp.Transport
 	tools     []string
-	poller    *notifications.Poller
 }
 
 // assemble builds the MCP server over the given transport: capability-group
-// tool resolution and registration, error middleware, instructions. With
-// review notifications enabled it additionally declares the channel
-// capability, registers subscribe_change, appends the instructions sentence,
-// and wires the poller through the connection-capturing transport; disabled,
-// the assembled server is byte-identical to the historical output and
-// starts no goroutine.
-func assemble(
-	cfg *config.Config, client *gerritclient.Client, transport mcp.Transport, lgr *slog.Logger,
-) (*server, error) {
-	srv := mcp.NewServer(&mcp.Implementation{Name: serverName, Version: version}, serverOptions(cfg))
+// tool resolution and registration, error middleware, instructions.
+func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Transport) (*server, error) {
+	srv := mcp.NewServer(
+		&mcp.Implementation{Name: serverName, Version: version},
+		&mcp.ServerOptions{Instructions: instructions},
+	)
 	srv.AddReceivingMiddleware(tools.WrapErrors)
 
 	enabled, err := registry.Resolve(cfg)
@@ -118,75 +101,24 @@ func assemble(
 		set[name] = true
 	}
 
-	for _, t := range tools.All(client) {
+	filters := notifications.Filters{
+		Self:            client.Self(),
+		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
+		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
+		ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
+	}
+
+	for _, t := range tools.All(client, filters) {
 		if set[t.Name] {
 			t.Register(srv)
 		}
 	}
 
-	s := &server{mcp: srv, transport: transport, tools: enabled, poller: nil}
-
-	if cfg.ReviewNotifications {
-		capture := &captureTransport{inner: transport}
-		store := notifications.NewStore()
-		emitter := &channelEmitter{transport: capture, lgr: lgr}
-
-		tools.SubscribeChange(client, store).Register(srv)
-		tools.UnsubscribeChange(client, store).Register(srv)
-
-		s.transport = capture
-		s.tools = append(s.tools, tools.NameSubscribeChange, tools.NameUnsubscribeChange)
-		s.poller = notifications.NewPoller(notifications.PollerConfig{
-			Store:    store,
-			Client:   client,
-			Renderer: tools.NewDeltaRenderer(),
-			Emitter:  emitter,
-			Filters: notifications.Filters{
-				Self:            client.Self(),
-				IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
-				ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
-				ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
-			},
-			Interval: cfg.ReviewNotificationsPollInterval,
-			Logger:   lgr,
-		})
-	}
-
-	return s, nil
+	return &server{mcp: srv, transport: transport, tools: enabled}, nil
 }
 
-// serverOptions carries the instructions and, only when review notifications
-// are enabled, the channel capability. Overriding Capabilities keeps the
-// SDK's tools inference but drops its logging default, so Logging is
-// declared explicitly to keep parity with the disabled path (pinned by
-// Test_Learning_CapabilitiesOverride).
-//
-// SEP-2577 deprecates logging as of protocol version 2026-07-28, yet the SDK
-// keeps declaring it for a nil Capabilities, so parity still needs the
-// explicit declaration. Drop it — and the assertions that pin it — once the
-// SDK drops its own default.
-func serverOptions(cfg *config.Config) *mcp.ServerOptions {
-	opts := &mcp.ServerOptions{Instructions: instructions}
-
-	if cfg.ReviewNotifications {
-		opts.Instructions += notificationsInstructions
-
-		opts.Capabilities = &mcp.ServerCapabilities{
-			Logging:      &mcp.LoggingCapabilities{}, //nolint:staticcheck // deprecated, kept for parity — see above
-			Experimental: map[string]any{channelCapability: map[string]any{}},
-		}
-	}
-
-	return opts
-}
-
-// run serves MCP over the assembled transport until ctx cancels, with the
-// poller — when one was assembled — running alongside on the same context.
+// run serves MCP over the assembled transport until ctx cancels.
 func (s *server) run(ctx context.Context) error {
-	if s.poller != nil {
-		go s.poller.Run(ctx)
-	}
-
 	if err := s.mcp.Run(ctx, s.transport); err != nil {
 		return e.NewFrom("run mcp server", err)
 	}

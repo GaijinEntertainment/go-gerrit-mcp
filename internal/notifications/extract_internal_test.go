@@ -44,22 +44,16 @@ func Test_ExtractDelta(t *testing.T) {
 	t.Parallel()
 
 	base := "2026-07-01 10:00:00.000000000"
-	seed := func(t *testing.T) Cursor {
+	since := func(t *testing.T) time.Time {
 		t.Helper()
 
-		return NewCursor(ts(t, base).Time, "NEW")
+		return ts(t, base).Time
 	}
 
-	t.Run("quiet change yields an empty delta and only moves updated", func(t *testing.T) {
+	t.Run("quiet change yields an empty delta", func(t *testing.T) {
 		t.Parallel()
 
-		info := detailedChange(t, "NEW")
-
-		delta, next := extractDelta(seed(t), info, nil)
-
-		assert.True(t, delta.Empty())
-		assert.Equal(t, info.Updated.Time, next.Updated)
-		assert.Equal(t, seed(t).Messages, next.Messages)
+		assert.True(t, extractDelta(since(t), "NEW", detailedChange(t, "NEW"), nil).Empty())
 	})
 
 	t.Run("new messages extracted with marks advanced", func(t *testing.T) {
@@ -79,16 +73,14 @@ func Test_ExtractDelta(t *testing.T) {
 			},
 		}
 
-		delta, next := extractDelta(seed(t), info, nil)
+		delta := extractDelta(since(t), "NEW", info, nil)
 
 		require.Len(t, delta.Messages, 2, "message dated at the cursor is old news")
 		assert.Equal(t, "m2", delta.Messages[0].ID)
 		assert.Equal(t, "m3", delta.Messages[1].ID)
-		assert.Equal(t, ts(t, "2026-07-01 11:00:00.000000000").Time, next.Messages)
 
-		// Replay against the advanced cursor is silent.
-		replay, _ := extractDelta(next, info, nil)
-		assert.True(t, replay.Empty())
+		assert.True(t, extractDelta(info.Updated.Time, "NEW", info, nil).Empty(),
+			"a request from the reported point is silent")
 	})
 
 	t.Run("vote-only update produces vote events", func(t *testing.T) {
@@ -110,7 +102,7 @@ func Test_ExtractDelta(t *testing.T) {
 			},
 		}
 
-		delta, next := extractDelta(seed(t), info, nil)
+		delta := extractDelta(since(t), "NEW", info, nil)
 
 		require.Len(t, delta.Votes, 2, "a dateless reviewer entry never voted")
 		assert.Equal(t, "Code-Review", delta.Votes[0].Label)
@@ -118,10 +110,8 @@ func Test_ExtractDelta(t *testing.T) {
 		assert.Equal(t, "bob", delta.Votes[0].Voter.Username)
 		assert.Equal(t, "Verified", delta.Votes[1].Label)
 		assert.Empty(t, delta.Messages)
-		assert.Equal(t, ts(t, "2026-07-01 11:00:00.000000000").Time, next.Votes)
 
-		replay, _ := extractDelta(next, info, nil)
-		assert.True(t, replay.Empty())
+		assert.True(t, extractDelta(info.Updated.Time, "NEW", info, nil).Empty())
 	})
 
 	t.Run("comment burst yields one delta with the full listing", func(t *testing.T) {
@@ -139,14 +129,32 @@ func Test_ExtractDelta(t *testing.T) {
 			},
 		}
 
-		delta, next := extractDelta(seed(t), info, comments)
+		delta := extractDelta(since(t), "NEW", info, comments)
 
 		assert.Equal(t, map[string]bool{"c2": true, "c3": true}, delta.NewComments)
 		assert.Equal(t, comments, delta.Comments, "renderer needs the surrounding threads, not only the new comments")
-		assert.Equal(t, fresh2.Time, next.Comments)
 
-		replay, _ := extractDelta(next, info, comments)
-		assert.True(t, replay.Empty())
+		assert.True(t, extractDelta(info.Updated.Time, "NEW", info, comments).Empty())
+	})
+
+	t.Run("comment past the change's update waits for the next report", func(t *testing.T) {
+		t.Parallel()
+
+		info := detailedChange(t, "NEW")
+		covered := ts(t, movedAt)
+		later := ts(t, "2026-07-01 11:00:01.000000000")
+		comments := map[string][]gerrit.CommentInfo{
+			"main.go": {
+				{ID: "c1", Updated: &covered, Message: "in the change read"},
+				{ID: "c2", Updated: &later, Message: "published before the comment read", InReplyTo: "c1"},
+			},
+		}
+
+		assert.Equal(t, map[string]bool{"c1": true}, extractDelta(since(t), "NEW", info, comments).NewComments)
+
+		info.Updated = later
+
+		assert.Equal(t, map[string]bool{"c2": true}, extractDelta(covered.Time, "NEW", info, comments).NewComments)
 	})
 
 	t.Run("status transition detected from the status field", func(t *testing.T) {
@@ -154,15 +162,13 @@ func Test_ExtractDelta(t *testing.T) {
 
 		info := detailedChange(t, "MERGED")
 
-		delta, next := extractDelta(seed(t), info, nil)
+		delta := extractDelta(since(t), "NEW", info, nil)
 
 		require.NotNil(t, delta.Transition)
 		assert.Equal(t, "NEW", delta.Transition.From)
 		assert.Equal(t, "MERGED", delta.Transition.To)
-		assert.Equal(t, "MERGED", next.Status)
 
-		replay, _ := extractDelta(next, info, nil)
-		assert.True(t, replay.Empty())
+		assert.True(t, extractDelta(info.Updated.Time, "MERGED", info, nil).Empty())
 	})
 
 	t.Run("mixed activity groups into one delta", func(t *testing.T) {
@@ -187,7 +193,7 @@ func Test_ExtractDelta(t *testing.T) {
 			"main.go": {{ID: "c1", Updated: &fresh, Message: "nice"}},
 		}
 
-		delta, next := extractDelta(seed(t), info, comments)
+		delta := extractDelta(since(t), "NEW", info, comments)
 
 		assert.Len(t, delta.Messages, 1)
 		assert.Len(t, delta.Votes, 1)
@@ -195,7 +201,6 @@ func Test_ExtractDelta(t *testing.T) {
 		require.NotNil(t, delta.Transition)
 		assert.False(t, delta.Empty())
 
-		replay, _ := extractDelta(next, info, comments)
-		assert.True(t, replay.Empty())
+		assert.True(t, extractDelta(info.Updated.Time, "MERGED", info, comments).Empty())
 	})
 }

@@ -72,37 +72,30 @@ disable flags (suggests per-tool switches independent of groups; filters are sub
 
 ### llmxml
 
-The output format of every tool: an LLM-digestible subset of XML — line-structured, semantically tagged text meant to
-be read by a model, with no transport or deserialization role and no indentation. Emitted by a purpose-built renderer;
-there is no schema and no consumer that parses it back.
+The output format of every tool that a model reads: an LLM-digestible subset of XML — line-structured, semantically
+tagged text, with no transport or deserialization role and no indentation. Emitted by a purpose-built renderer; there
+is no schema and no consumer that parses it back. The one tool that a program reads, `get_review_activity`, returns
+JSON whose `content` field is llmxml.
 **Avoid:** XML (implies spec compliance and `encoding/xml` serialization — explicitly rejected; no declaration, no
-namespaces, no round-tripping); JSON output / structured output (MCP-ecosystem default assumption; this server
-deliberately emits text for model consumption, not machine-parseable payloads).
+namespaces, no round-tripping); JSON output / structured output for a tool that a model reads (MCP-ecosystem default
+assumption; such a tool deliberately emits text for model consumption, not a machine-parseable payload).
 
 ### Review notifications
 
-The feature (dedicated flag family, disabled by default) that polls Gerrit for activity on subscribed changes and
-pushes filtered events into the agent's session. Gated by its own enable flag with `GERRIT_MCP_*` mirrors — it is
-deliberately not a capability group, because it is client-side mechanics, not a Gerrit operation class.
+The feature that puts new review activity on subscribed changes into the agent's session. A Claude Code plugin polls
+the server's `get_review_activity` tool and delivers the result; the server keeps no state and only applies the
+`--review-notifications-*` filter flags. It is deliberately not a capability group, because it is client-side
+mechanics, not a Gerrit operation class.
 **Avoid:** notification group / notification capability (implies a fourth capability group — groups partition Gerrit
 operations by trail impact, this partitions nothing); watch feature / watcher (collides with Gerrit's server-side
-watched-projects setting, which this is not).
+watched-projects setting, which this is not); channel (the Claude Code channels contract is a different mechanism,
+which this feature does not use).
 
 ### Subscription
 
-The per-session, in-memory set of changes the agent asked to be notified about, plus the per-change cursor tracking
-what was already reported. Trail-free — nothing is visible on the Gerrit instance — and bound to the server process
-lifetime: a restarted session starts empty and re-subscribes. Terminal states (merged, abandoned) end a subscription
-automatically.
+The per-session set of changes the agent asked to be notified about, held by the plugin together with the point per
+change that the last report reached. Trail-free — nothing is visible on the Gerrit instance — and bound to the
+session. Terminal states (merged, abandoned) end a subscription automatically.
 **Avoid:** watch / watch set (Gerrit's "watched projects" is a server-side account setting that emails you — this is
-local state the server holds for one session); star (Gerrit's starred-changes mechanism, also server-side account
+local state the plugin holds for one session); star (Gerrit's starred-changes mechanism, also server-side account
 state).
-
-### Channel
-
-The Claude Code channels contract this server implements when review notifications are enabled: the
-`claude/channel` experimental capability declared at initialize, plus `notifications/claude/channel` events whose
-payload the client injects into the model's session as a `<channel>` block.
-**Avoid:** notification channel in the MCP-logging sense (`notifications/message` is a different mechanism that does
-not reach the model); chat channel (channels here carry review activity into the session, not conversation out of
-it).

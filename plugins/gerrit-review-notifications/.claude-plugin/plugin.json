@@ -1,0 +1,18 @@
+{
+	"name": "gerrit-review-notifications",
+	"version": "0.1.0",
+	"description": "Follows Gerrit changes and delivers new review activity into the Claude Code session",
+	"author": {
+		"name": "xobotyi"
+	},
+	"license": "MIT",
+	"types": "./types/index.d.ts",
+	"userConfig": {
+		"server": {
+			"type": "string",
+			"title": "Gerrit MCP server",
+			"description": "Name of the go-gerrit-mcp server as /mcp lists it",
+			"default": "gerrit"
+		}
+	}
+}

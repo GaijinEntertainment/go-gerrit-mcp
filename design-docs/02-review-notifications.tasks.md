@@ -1,5 +1,9 @@
 # Tasks: Review notifications
 
+> **Superseded for delivery.** Review notifications are delivered by a Claude Code plugin, and the server keeps no
+> subscription state: [ADR 2.1](./adr/2.1-notification-delivery.md). This document records the channels design that the
+> initiative built first.
+
 - **Date:** 2026-07-13
 - **Frame:** [02-review-notifications.frame.md](./02-review-notifications.frame.md)
 - **Tracker:** GitHub Issues (this repository) — tasks map 1:1 to issues #49–#63; phases are the

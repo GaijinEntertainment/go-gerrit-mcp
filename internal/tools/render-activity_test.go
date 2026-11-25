@@ -2,7 +2,6 @@ package tools_test
 
 import (
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -85,10 +84,8 @@ func activityComments(t *testing.T) map[string][]gerrit.CommentInfo {
 	}
 }
 
-func Test_DeltaRenderer(t *testing.T) {
+func Test_RenderReviewActivity(t *testing.T) {
 	t.Parallel()
-
-	renderer := tools.NewDeltaRenderer()
 
 	t.Run("messages", func(t *testing.T) {
 		t.Parallel()
@@ -108,10 +105,7 @@ func Test_DeltaRenderer(t *testing.T) {
 			},
 		}
 
-		content, meta := renderer.Render(d)
-
-		golden(t, "render-activity-messages", content)
-		assert.Equal(t, map[string]string{"change": "123", "project": "core", "kind": "message"}, meta)
+		golden(t, "render-activity-messages", tools.ReviewActivityBlock(d))
 	})
 
 	t.Run("votes", func(t *testing.T) {
@@ -132,10 +126,8 @@ func Test_DeltaRenderer(t *testing.T) {
 			},
 		}
 
-		content, meta := renderer.Render(d)
-
-		golden(t, "render-activity-votes", content)
-		assert.Equal(t, "vote", meta["kind"])
+		golden(t, "render-activity-votes", tools.ReviewActivityBlock(d))
+		assert.Equal(t, "Code-Review +2, Verified -1", tools.ReviewActivitySummary(d))
 	})
 
 	t.Run("threads carry only touched threads", func(t *testing.T) {
@@ -146,10 +138,9 @@ func Test_DeltaRenderer(t *testing.T) {
 		d.Comments = activityComments(t)
 		d.NewComments = map[string]bool{"c2": true}
 
-		content, meta := renderer.Render(d)
+		content := tools.ReviewActivityBlock(d)
 
 		golden(t, "render-activity-threads", content)
-		assert.Equal(t, "comment", meta["kind"])
 		assert.NotContains(t, content, "util.go", "untouched threads must not render")
 		assert.Contains(t, content, "nil deref here", "the touched thread arrives whole, not only its new comment")
 	})
@@ -162,10 +153,7 @@ func Test_DeltaRenderer(t *testing.T) {
 		d.Change.Status = "ABANDONED"
 		d.Transition = &notifications.Transition{From: "NEW", To: "ABANDONED"}
 
-		content, meta := renderer.Render(d)
-
-		golden(t, "render-activity-transition", content)
-		assert.Equal(t, "transition", meta["kind"])
+		golden(t, "render-activity-transition", tools.ReviewActivityBlock(d))
 	})
 
 	t.Run("mixed delta renders every kind in one payload", func(t *testing.T) {
@@ -192,44 +180,23 @@ func Test_DeltaRenderer(t *testing.T) {
 		d.NewComments = map[string]bool{"c2": true}
 		d.Transition = &notifications.Transition{From: "NEW", To: "MERGED"}
 
-		content, meta := renderer.Render(d)
-
-		golden(t, "render-activity-mixed", content)
-		assert.Equal(t, map[string]string{
-			"change": "123", "project": "core", "kind": "message,vote,comment,transition",
-		}, meta)
+		golden(t, "render-activity-mixed", tools.ReviewActivityBlock(d))
+		assert.Equal(t, "1 message, Code-Review +2, 1 comment, NEW -> MERGED", tools.ReviewActivitySummary(d),
+			"the summary carries no author name and no message text")
 	})
 
-	t.Run("ended notice names the reason", func(t *testing.T) {
+	t.Run("an inaccessible change names the reason", func(t *testing.T) {
 		t.Parallel()
 
-		content, meta := renderer.RenderEnded(123,
-			"the change was deleted or is no longer visible to this account")
-
-		golden(t, "render-activity-ended", content)
-		assert.Equal(t, map[string]string{"change": "123", "kind": "ended"}, meta)
-	})
-
-	t.Run("meta keys satisfy the channel identifier restriction", func(t *testing.T) {
-		t.Parallel()
-
-		d := emptyDelta(t)
-
-		d.Transition = &notifications.Transition{From: "NEW", To: "MERGED"}
-
-		_, meta := renderer.Render(d)
-
-		key := regexp.MustCompile(`^[A-Za-z0-9_]+$`)
-		for k := range meta {
-			assert.True(t, key.MatchString(k), "meta key %q would be dropped by the client", k)
-		}
+		golden(t, "render-activity-inaccessible",
+			tools.InaccessibleBlock(123, "the change was deleted or is no longer visible to this account"))
 	})
 }
 
-// Test_DeltaRenderer_ThreadParity proves payload thread rendering is
+// Test_RenderReviewActivity_ThreadParity proves payload thread rendering is
 // byte-identical to get_change_comments rendering the same comments: the
 // thread block of the tool output must appear verbatim in the payload.
-func Test_DeltaRenderer_ThreadParity(t *testing.T) {
+func Test_RenderReviewActivity_ThreadParity(t *testing.T) {
 	t.Parallel()
 
 	commentsJSON := ")]}'\n" + `{
@@ -276,8 +243,6 @@ func Test_DeltaRenderer_ThreadParity(t *testing.T) {
 	d.Comments = map[string][]gerrit.CommentInfo{"main.go": activityComments(t)["main.go"]}
 	d.NewComments = map[string]bool{"c2": true}
 
-	content, _ := tools.NewDeltaRenderer().Render(d)
-
-	assert.Contains(t, content, toolThread,
+	assert.Contains(t, tools.ReviewActivityBlock(d), toolThread,
 		"payload thread rendering must be byte-identical to the comments tool")
 }

@@ -1,5 +1,9 @@
 # Alignment: Review notifications
 
+> **Superseded for delivery.** Review notifications are delivered by a Claude Code plugin, and the server keeps no
+> subscription state: [ADR 2.1](./adr/2.1-notification-delivery.md). This document records the channels design that the
+> initiative built first.
+
 - **Date:** 2026-07-13
 - **Brief:** design-docs/02-review-notifications.brief.md
 - **Research:** design-docs/02-review-notifications.research.md
@@ -80,5 +84,5 @@ server byte-identical to today: no tools, no capability, no instructions, no pol
 
 ## Recorded ADRs
 
-- [ADR 2.1: Review notifications ride the Claude Code channels contract](./adr/2.1-channels-contract-delivery.md)
+- [ADR 2.1: Deliver review notifications through a Claude Code plugin](./adr/2.1-notification-delivery.md)
 - [ADR 2.2: Session-scoped explicit subscriptions over account-wide watching](./adr/2.2-session-scoped-subscriptions.md)
