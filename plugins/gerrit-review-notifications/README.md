@@ -31,14 +31,18 @@ One mod that Claude Code loads itself. It starts no process: it calls the `get_r
   the server's own summary, such as `1 message, Code-Review +2`.
 - **End of a subscription** — a merged, abandoned, or no longer readable change is reported one last time and then
   dropped. `unsubscribe_change` ends a subscription earlier.
+- **Server check** — before a subscription, the mod calls the server's `get_server_info` and refuses, with the cause,
+  when the server has no such tool, cannot reach Gerrit, or does not offer `get_review_activity`.
 - **On screen** — a band above the prompt lists the subscribed changes as links to Gerrit, and the two tools draw as
-  one short row each.
+  one short row each. When a subscription is refused or a poll fails because of the server, the band names the cause
+  in place of that list until the server answers again.
 
 A subscription belongs to one session and leaves no trace on the Gerrit instance.
 
 ## Installation
 
-The session needs a go-gerrit-mcp server that offers `get_review_activity`, which its `read` group includes.
+The session needs a go-gerrit-mcp server that offers `get_server_info` and `get_review_activity`: a release that has
+`get_server_info`, with the `read` group enabled.
 
 ```text
 /plugin install gerrit-review-notifications --marketplace GaijinEntertainment/go-gerrit-mcp

@@ -186,7 +186,8 @@ own, and enabled groups union.
   a program. The server keeps no state. The [review notifications](#review-notifications) plugin calls it.
 - `get_server_info`: the server name and version, the MCP protocol version, the `state` (`ready`, `not_configured`,
   `credentials_rejected`, or `unreachable`, with a `reason` when it is not ready), the Gerrit account, and the
-  enabled groups, tools, and project scope, as JSON for a program.
+  enabled groups, tools, and project scope, as JSON for a program. The
+  [review notifications](#review-notifications) plugin calls it to check the server.
 - `post_comments`: publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments. Replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote`: set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.
@@ -218,7 +219,8 @@ in Claude Code:
 The plugin starts no server. Every 60 seconds it calls `get_review_activity` on the Gerrit MCP server that the session
 already runs: one batched query for all subscribed changes, and a detail fetch only for a change that moved or that
 the query did not list. It finds the server by name: `gerrit` by default, or the name in the plugin option `server`.
-That server must offer `get_review_activity`, which the `read` group includes.
+That server must offer `get_server_info`, which the plugin calls to check it, and `get_review_activity`, which the
+`read` group includes.
 
 Subscriptions belong to one session and leave no trace on the Gerrit instance. The server holds nothing about them.
 

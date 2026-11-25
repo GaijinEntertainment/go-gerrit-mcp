@@ -10,7 +10,7 @@ is a mod, and why the server keeps no state: [ADR 2.1](../../design-docs/adr/2.1
 Run every command in this file from `plugins/`.
 
 - **`hooks/register.tsx`** — the whole implementation, loaded through `modules` in `hooks/hooks.json`.
-- **`types/index.d.ts`** — the `$.state` contract: `subscriptions` and `isMainTurnRunning`.
+- **`types/index.d.ts`** — the `$.state` contract: `subscriptions`, `isMainTurnRunning`, and `serverProblem`.
 - **`tests/register.test.ts`** — the test-kit suite, on a mocked clock and a stub MCP server. Run
   `claude plugin test gerrit-review-notifications` after any change to the module.
 - **`tsconfig.json`** — extends `.claude-plugin/types/tsconfig.json`, which Claude Code generates for its own version
@@ -19,8 +19,13 @@ Run every command in this file from `plugins/`.
 
 ## How It Works
 
-- `subscribe_change` calls `get_review_activity` without `since` and stores the returned `since`, `status`, and `url`
-  for the change in `$.state`.
+- `subscribe_change` first calls `get_server_info` and refuses unless the server is in state `ready` and offers
+  `get_review_activity`. A server without `get_server_info` is too old or is not go-gerrit-mcp.
+- A refusal, or a failed poll, stores the cause in `serverProblem`, which the band shows; a failed poll asks
+  `get_server_info` for the cause and keeps its own error when the server is ready. A subscription or a poll whose
+  `get_review_activity` call succeeds clears it.
+- `subscribe_change` then calls `get_review_activity` without `since` and stores the returned `since`, `status`, and
+  `url` for the change in `$.state`.
 - A `$.clock.every` timer calls `get_review_activity` with the stored `since` and `status` of every subscription, in
   one call. An entry with `error` keeps its stored point; an entry with `ended` removes the subscription.
 - One poll makes one delivery. The full content is appended with `$.session.append`. When no turn of the main agent
