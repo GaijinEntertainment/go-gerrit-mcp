@@ -15,17 +15,17 @@ import (
 
 func testConfig(url string) *config.Config {
 	return &config.Config{
-		GerritURL:                          url,
-		Username:                           "bot",
-		Token:                              "s3cret",
-		Groups:                             []config.Group{config.GroupRead},
-		IncludeTools:                       nil,
-		ExcludeTools:                       nil,
-		Projects:                           nil,
-		AllowForeignChanges:                false,
-		ReviewNotificationsIncludeOwn:      false,
-		ReviewNotificationsExcludeAccounts: nil,
-		ReviewNotificationsExcludePatterns: nil,
+		GerritURL:               url,
+		Username:                "bot",
+		Token:                   "s3cret",
+		Groups:                  []config.Group{config.GroupRead},
+		IncludeTools:            nil,
+		ExcludeTools:            nil,
+		Projects:                nil,
+		AllowForeignChanges:     false,
+		ActivityIncludeOwn:      false,
+		ActivityExcludeAccounts: nil,
+		ActivityExcludePatterns: nil,
 	}
 }
 

@@ -92,7 +92,7 @@ only the plugin delivers [review notifications](#review-notifications)).
 
 The feature that puts new review activity on subscribed changes into the agent's session. A Claude Code plugin polls
 the server's `get_review_activity` tool and delivers the result; the server keeps no state and only applies the
-`--review-notifications-*` filter flags. It is deliberately not a capability group, because it is client-side
+`--activity-*` filter flags. It is deliberately not a capability group, because it is client-side
 mechanics, not a Gerrit operation class.
 **Avoid:** notification group / notification capability (implies a fourth capability group — groups partition Gerrit
 operations by trail impact, this partitions nothing); watch feature / watcher (collides with Gerrit's server-side

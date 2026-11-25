@@ -49,18 +49,18 @@
           "default": "true"
         },
         {
-          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN",
-          "description": "Keep the authenticated account's own activity in review notifications",
+          "name": "GERRIT_MCP_ACTIVITY_INCLUDE_OWN",
+          "description": "Keep the authenticated account's own activity in the reported review activity",
           "format": "boolean",
           "default": "false"
         },
         {
-          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS",
-          "description": "Comma-separated usernames or numeric account IDs whose activity never becomes a review notification"
+          "name": "GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS",
+          "description": "Comma-separated usernames or numeric account IDs whose activity is never reported"
         },
         {
-          "name": "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS",
-          "description": "Comma-separated regular expressions; matching message or comment text never becomes a review notification"
+          "name": "GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS",
+          "description": "Comma-separated regular expressions; matching message or comment text is never reported"
         }
       ]
     }

@@ -53,7 +53,7 @@ server** for `gerrit-review-notifications` in `/config`, or set the `server` opt
 {"pluginConfigs": {"gerrit-review-notifications@go-gerrit-mcp": {"options": {"server": "gerrit-work"}}}}
 ```
 
-Which activity counts is configured on the server, with its `--review-notifications-*` flags: the account's own
+Which activity counts is configured on the server, with its `--activity-*` flags: the account's own
 activity is skipped by default, and accounts or message patterns can be excluded.
 
 ## Limits

@@ -30,17 +30,17 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 	t.Cleanup(srv.Close)
 
 	client, err := gerritclient.New(t.Context(), &config.Config{
-		GerritURL:                          srv.URL,
-		Username:                           "bot",
-		Token:                              "s3cret",
-		Groups:                             []config.Group{config.GroupRead},
-		IncludeTools:                       nil,
-		ExcludeTools:                       nil,
-		Projects:                           nil,
-		AllowForeignChanges:                false,
-		ReviewNotificationsIncludeOwn:      false,
-		ReviewNotificationsExcludeAccounts: nil,
-		ReviewNotificationsExcludePatterns: nil,
+		GerritURL:               srv.URL,
+		Username:                "bot",
+		Token:                   "s3cret",
+		Groups:                  []config.Group{config.GroupRead},
+		IncludeTools:            nil,
+		ExcludeTools:            nil,
+		Projects:                nil,
+		AllowForeignChanges:     false,
+		ActivityIncludeOwn:      false,
+		ActivityExcludeAccounts: nil,
+		ActivityExcludePatterns: nil,
 	})
 	require.NoError(t, err)
 
@@ -49,17 +49,17 @@ func testGerritClient(t *testing.T, handler http.HandlerFunc) *gerritclient.Clie
 
 func testConfig() *config.Config {
 	return &config.Config{
-		GerritURL:                          "",
-		Username:                           "",
-		Token:                              "",
-		Groups:                             []config.Group{config.GroupRead},
-		IncludeTools:                       nil,
-		ExcludeTools:                       nil,
-		Projects:                           nil,
-		AllowForeignChanges:                false,
-		ReviewNotificationsIncludeOwn:      false,
-		ReviewNotificationsExcludeAccounts: nil,
-		ReviewNotificationsExcludePatterns: nil,
+		GerritURL:               "",
+		Username:                "",
+		Token:                   "",
+		Groups:                  []config.Group{config.GroupRead},
+		IncludeTools:            nil,
+		ExcludeTools:            nil,
+		Projects:                nil,
+		AllowForeignChanges:     false,
+		ActivityIncludeOwn:      false,
+		ActivityExcludeAccounts: nil,
+		ActivityExcludePatterns: nil,
 	}
 }
 
