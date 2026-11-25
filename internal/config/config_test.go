@@ -247,25 +247,50 @@ func Test_Load_OwnChanges(t *testing.T) {
 	})
 }
 
-func Test_Load_ReviewNotificationFilters(t *testing.T) {
+func Test_Load_ActivityFilters(t *testing.T) {
 	t.Parallel()
+
+	t.Run("former review-notifications flags are refused", func(t *testing.T) {
+		t.Parallel()
+
+		for _, flag := range []string{
+			"--review-notifications-include-own=true",
+			"--review-notifications-exclude-accounts=ci-bot",
+			"--review-notifications-exclude-patterns=^Build",
+		} {
+			_, err := config.Load([]string{flag}, env(secrets()))
+			assert.ErrorContains(t, err, "parse flags", flag)
+		}
+	})
+
+	t.Run("former review-notifications env mirror is ignored", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+
+		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN"] = "true"
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.False(t, cfg.ActivityIncludeOwn)
+	})
 
 	t.Run("zero config resolves to no-op filters", func(t *testing.T) {
 		t.Parallel()
 
 		cfg, err := config.Load(nil, env(secrets()))
 		require.NoError(t, err)
-		assert.False(t, cfg.ReviewNotificationsIncludeOwn)
-		assert.Nil(t, cfg.ReviewNotificationsExcludeAccounts)
-		assert.Nil(t, cfg.ReviewNotificationsExcludePatterns)
+		assert.False(t, cfg.ActivityIncludeOwn)
+		assert.Nil(t, cfg.ActivityExcludeAccounts)
+		assert.Nil(t, cfg.ActivityExcludePatterns)
 	})
 
 	t.Run("include-own resolves from flag", func(t *testing.T) {
 		t.Parallel()
 
-		cfg, err := config.Load([]string{"--review-notifications-include-own", "true"}, env(secrets()))
+		cfg, err := config.Load([]string{"--activity-include-own", "true"}, env(secrets()))
 		require.NoError(t, err)
-		assert.True(t, cfg.ReviewNotificationsIncludeOwn)
+		assert.True(t, cfg.ActivityIncludeOwn)
 	})
 
 	t.Run("include-own flag wins over env mirror", func(t *testing.T) {
@@ -273,21 +298,21 @@ func Test_Load_ReviewNotificationFilters(t *testing.T) {
 
 		m := secrets()
 
-		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN"] = "true"
+		m["GERRIT_MCP_ACTIVITY_INCLUDE_OWN"] = "true"
 
-		cfg, err := config.Load([]string{"--review-notifications-include-own=false"}, env(m))
+		cfg, err := config.Load([]string{"--activity-include-own=false"}, env(m))
 		require.NoError(t, err)
-		assert.False(t, cfg.ReviewNotificationsIncludeOwn)
+		assert.False(t, cfg.ActivityIncludeOwn)
 	})
 
 	t.Run("exclude-accounts parses from flag with whitespace", func(t *testing.T) {
 		t.Parallel()
 
 		cfg, err := config.Load([]string{
-			"--review-notifications-exclude-accounts", " ci-bot , 1000042 ",
+			"--activity-exclude-accounts", " ci-bot , 1000042 ",
 		}, env(secrets()))
 		require.NoError(t, err)
-		assert.Equal(t, []string{"ci-bot", "1000042"}, cfg.ReviewNotificationsExcludeAccounts)
+		assert.Equal(t, []string{"ci-bot", "1000042"}, cfg.ActivityExcludeAccounts)
 	})
 
 	t.Run("exclude-accounts resolves from env mirror", func(t *testing.T) {
@@ -295,22 +320,22 @@ func Test_Load_ReviewNotificationFilters(t *testing.T) {
 
 		m := secrets()
 
-		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS"] = "ci-bot"
+		m["GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS"] = "ci-bot"
 
 		cfg, err := config.Load(nil, env(m))
 		require.NoError(t, err)
-		assert.Equal(t, []string{"ci-bot"}, cfg.ReviewNotificationsExcludeAccounts)
+		assert.Equal(t, []string{"ci-bot"}, cfg.ActivityExcludeAccounts)
 	})
 
 	t.Run("exclude-patterns compile from a comma-separated flag", func(t *testing.T) {
 		t.Parallel()
 
 		cfg, err := config.Load([]string{
-			"--review-notifications-exclude-patterns", `^Uploaded patch set, ^Build (started|running)`,
+			"--activity-exclude-patterns", `^Uploaded patch set, ^Build (started|running)`,
 		}, env(secrets()))
 		require.NoError(t, err)
 
-		patterns := cfg.ReviewNotificationsExcludePatterns
+		patterns := cfg.ActivityExcludePatterns
 		require.Len(t, patterns, 2)
 		assert.True(t, patterns[0].MatchString("Uploaded patch set 4"))
 		assert.True(t, patterns[1].MatchString("Build running: 12 files"))
@@ -322,19 +347,19 @@ func Test_Load_ReviewNotificationFilters(t *testing.T) {
 
 		m := secrets()
 
-		m["GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS"] = "^Uploaded patch set"
+		m["GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS"] = "^Uploaded patch set"
 
 		cfg, err := config.Load(nil, env(m))
 		require.NoError(t, err)
 
-		require.Len(t, cfg.ReviewNotificationsExcludePatterns, 1)
-		assert.Equal(t, "^Uploaded patch set", cfg.ReviewNotificationsExcludePatterns[0].String())
+		require.Len(t, cfg.ActivityExcludePatterns, 1)
+		assert.Equal(t, "^Uploaded patch set", cfg.ActivityExcludePatterns[0].String())
 	})
 
 	t.Run("invalid pattern fails startup naming it", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := config.Load([]string{"--review-notifications-exclude-patterns", "[unclosed"}, env(secrets()))
+		_, err := config.Load([]string{"--activity-exclude-patterns", "[unclosed"}, env(secrets()))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "invalid exclude pattern")
 		assert.ErrorContains(t, err, "[unclosed")
@@ -347,7 +372,7 @@ func Test_Load_ReviewNotificationFilters(t *testing.T) {
 		delete(m, "GERRIT_TOKEN")
 
 		_, err := config.Load([]string{
-			"--review-notifications-exclude-patterns", "[one,ok.*,(two",
+			"--activity-exclude-patterns", "[one,ok.*,(two",
 		}, env(m))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "[one")

@@ -70,18 +70,16 @@ type Config struct {
 	// (the default), trail-leaving operations are refused on changes not
 	// owned by the authenticated account.
 	AllowForeignChanges bool
-	// ReviewNotificationsIncludeOwn keeps the authenticated account's own
-	// activity in review notifications; by default own activity never
-	// becomes a notification.
-	ReviewNotificationsIncludeOwn bool
-	// ReviewNotificationsExcludeAccounts lists accounts (usernames or
-	// numeric account IDs) whose activity never becomes a review
-	// notification.
-	ReviewNotificationsExcludeAccounts []string
-	// ReviewNotificationsExcludePatterns drops review-notification events
-	// whose message or comment text matches any pattern. Compiled at load;
-	// an invalid pattern fails startup.
-	ReviewNotificationsExcludePatterns []*regexp.Regexp
+	// ActivityIncludeOwn keeps the authenticated account's own activity in
+	// the reported review activity; by default it is never reported.
+	ActivityIncludeOwn bool
+	// ActivityExcludeAccounts lists accounts (usernames or numeric account
+	// IDs) whose activity is never reported.
+	ActivityExcludeAccounts []string
+	// ActivityExcludePatterns drops review activity whose message or comment
+	// text matches any pattern. Compiled at load; an invalid pattern fails
+	// startup.
+	ActivityExcludePatterns []*regexp.Regexp
 }
 
 // behaviorFlag is one CLI flag with its GERRIT_MCP_* env mirror. The flag
@@ -130,22 +128,22 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 		fallback: "true",
 	}
 	includeOwn := behaviorFlag{
-		name:     "review-notifications-include-own",
-		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN",
-		usage:    "keep the authenticated account's own activity in review notifications",
+		name:     "activity-include-own",
+		mirror:   "GERRIT_MCP_ACTIVITY_INCLUDE_OWN",
+		usage:    "keep the authenticated account's own activity in the reported review activity",
 		fallback: "false",
 	}
 	excludeAccounts := behaviorFlag{
-		name:     "review-notifications-exclude-accounts",
-		mirror:   "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS",
-		usage:    "comma-separated usernames or numeric account IDs whose activity never becomes a review notification",
+		name:     "activity-exclude-accounts",
+		mirror:   "GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS",
+		usage:    "comma-separated usernames or numeric account IDs whose activity is never reported",
 		fallback: "",
 	}
 	excludePatterns := behaviorFlag{
-		name:   "review-notifications-exclude-patterns",
-		mirror: "GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS",
-		usage: "comma-separated regular expressions; message or comment text matching any of them never " +
-			"becomes a review notification",
+		name:   "activity-exclude-patterns",
+		mirror: "GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS",
+		usage: "comma-separated regular expressions; message or comment text matching any of them is " +
+			"never reported",
 		fallback: "",
 	}
 
@@ -158,17 +156,17 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		GerritURL:                          getenv(EnvURL),
-		Username:                           getenv(EnvUsername),
-		Token:                              getenv(EnvToken),
-		Groups:                             nil,
-		IncludeTools:                       splitList(includeTools.value),
-		ExcludeTools:                       splitList(excludeTools.value),
-		Projects:                           splitList(projects.value),
-		AllowForeignChanges:                false,
-		ReviewNotificationsIncludeOwn:      false,
-		ReviewNotificationsExcludeAccounts: splitList(excludeAccounts.value),
-		ReviewNotificationsExcludePatterns: nil,
+		GerritURL:               getenv(EnvURL),
+		Username:                getenv(EnvUsername),
+		Token:                   getenv(EnvToken),
+		Groups:                  nil,
+		IncludeTools:            splitList(includeTools.value),
+		ExcludeTools:            splitList(excludeTools.value),
+		Projects:                splitList(projects.value),
+		AllowForeignChanges:     false,
+		ActivityIncludeOwn:      false,
+		ActivityExcludeAccounts: splitList(excludeAccounts.value),
+		ActivityExcludePatterns: nil,
 	}
 
 	errs := missingEnv(cfg)
@@ -184,12 +182,12 @@ func Load(args []string, getenv func(string) string) (*Config, error) {
 	if err != nil {
 		errs = append(errs, err)
 	} else {
-		cfg.ReviewNotificationsIncludeOwn = own
+		cfg.ActivityIncludeOwn = own
 	}
 
 	patterns, patternErrs := compilePatterns(excludePatterns)
 
-	cfg.ReviewNotificationsExcludePatterns = patterns
+	cfg.ActivityExcludePatterns = patterns
 
 	errs = append(errs, patternErrs...)
 

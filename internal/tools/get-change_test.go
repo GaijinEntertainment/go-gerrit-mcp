@@ -54,17 +54,17 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 	t.Cleanup(srv.Close)
 
 	cfg := &config.Config{
-		GerritURL:                          srv.URL,
-		Username:                           "bot",
-		Token:                              "s3cret",
-		Groups:                             []config.Group{config.GroupRead},
-		IncludeTools:                       nil,
-		ExcludeTools:                       nil,
-		Projects:                           nil,
-		AllowForeignChanges:                false,
-		ReviewNotificationsIncludeOwn:      false,
-		ReviewNotificationsExcludeAccounts: nil,
-		ReviewNotificationsExcludePatterns: nil,
+		GerritURL:               srv.URL,
+		Username:                "bot",
+		Token:                   "s3cret",
+		Groups:                  []config.Group{config.GroupRead},
+		IncludeTools:            nil,
+		ExcludeTools:            nil,
+		Projects:                nil,
+		AllowForeignChanges:     false,
+		ActivityIncludeOwn:      false,
+		ActivityExcludeAccounts: nil,
+		ActivityExcludePatterns: nil,
 	}
 	for _, m := range mutate {
 		m(cfg)
@@ -78,9 +78,9 @@ func session(t *testing.T, gerritHandler http.HandlerFunc, mutate ...func(*confi
 
 	filters := activity.Filters{
 		Self:            client.Self(),
-		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
-		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
-		ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
+		IncludeOwn:      cfg.ActivityIncludeOwn,
+		ExcludeAccounts: cfg.ActivityExcludeAccounts,
+		ExcludePatterns: cfg.ActivityExcludePatterns,
 	}
 
 	for _, tool := range tools.All(client, filters) {

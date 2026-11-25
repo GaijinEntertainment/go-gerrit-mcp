@@ -99,9 +99,9 @@ func assemble(cfg *config.Config, client *gerritclient.Client, transport mcp.Tra
 
 	filters := activity.Filters{
 		Self:            client.Self(),
-		IncludeOwn:      cfg.ReviewNotificationsIncludeOwn,
-		ExcludeAccounts: cfg.ReviewNotificationsExcludeAccounts,
-		ExcludePatterns: cfg.ReviewNotificationsExcludePatterns,
+		IncludeOwn:      cfg.ActivityIncludeOwn,
+		ExcludeAccounts: cfg.ActivityExcludeAccounts,
+		ExcludePatterns: cfg.ActivityExcludePatterns,
 	}
 
 	for _, t := range tools.All(client, filters) {

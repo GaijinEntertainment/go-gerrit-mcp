@@ -198,8 +198,12 @@ read tools and carries the activity whole, so nothing needs fetching afterwards.
 own subscription with a last notification that says so, and so does a change that becomes unreadable (deleted, or no
 longer visible to the account).
 
-The server has no `--review-notifications` and `--review-notifications-poll-interval` flags, and it does not start
-with either of them: remove them from the server arguments, and install the plugin in Claude Code:
+The server has no `--review-notifications*` flags, and it does not start with one of them. Remove
+`--review-notifications` and `--review-notifications-poll-interval` from the server arguments, and replace the filter
+flags `--review-notifications-include-own`, `--review-notifications-exclude-accounts`, and
+`--review-notifications-exclude-patterns` with the `--activity-*` flags below. The server ignores the old
+`GERRIT_MCP_REVIEW_NOTIFICATIONS_*` variables, so rename them to `GERRIT_MCP_ACTIVITY_*` too. Then install the plugin
+in Claude Code:
 
 ```
 /plugin install gerrit-review-notifications --marketplace GaijinEntertainment/go-gerrit-mcp
@@ -215,9 +219,9 @@ Subscriptions belong to one session and leave no trace on the Gerrit instance. T
 Noise control is operator configuration on the server. The server applies no heuristics of its own and filters
 nothing by message tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
 
-- the authenticated account's own activity is skipped by default (`--review-notifications-include-own` keeps it);
-- `--review-notifications-exclude-accounts` silences accounts by username or numeric ID;
-- `--review-notifications-exclude-patterns` drops events whose message or comment text matches a regular
+- the authenticated account's own activity is skipped by default (`--activity-include-own` keeps it);
+- `--activity-exclude-accounts` silences accounts by username or numeric ID;
+- `--activity-exclude-patterns` drops events whose message or comment text matches a regular
   expression; an invalid pattern fails startup with an error naming it.
 
 Every flag has a `GERRIT_MCP_*` mirror that follows the same settings layering as the rest of the configuration
@@ -236,9 +240,9 @@ binary and Docker invocations alike. Precedence: the flag wins over its mirror, 
 | `--own-changes-only` | `GERRIT_MCP_OWN_CHANGES_ONLY` | `true`  | Refuse trail-leaving operations on changes not owned by the authenticated account |
 | `--include-tools`    | `GERRIT_MCP_INCLUDE_TOOLS`    | (empty) | Keep only the listed tools from the group-resolved set         |
 | `--exclude-tools`    | `GERRIT_MCP_EXCLUDE_TOOLS`    | (empty) | Remove the listed tools from the group-resolved set            |
-| `--review-notifications-include-own` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_INCLUDE_OWN` | `false` | Keep the authenticated account's own activity in notifications |
-| `--review-notifications-exclude-accounts` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_ACCOUNTS` | (empty) | Accounts (usernames or numeric IDs) whose activity never becomes a notification |
-| `--review-notifications-exclude-patterns` | `GERRIT_MCP_REVIEW_NOTIFICATIONS_EXCLUDE_PATTERNS` | (empty) | Comma-separated regular expressions; matching message or comment text never becomes a notification |
+| `--activity-include-own` | `GERRIT_MCP_ACTIVITY_INCLUDE_OWN` | `false` | Keep the authenticated account's own activity in the reported review activity |
+| `--activity-exclude-accounts` | `GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS` | (empty) | Accounts (usernames or numeric IDs) whose activity is never reported |
+| `--activity-exclude-patterns` | `GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS` | (empty) | Comma-separated regular expressions; matching message or comment text is never reported |
 
 Notes:
 
