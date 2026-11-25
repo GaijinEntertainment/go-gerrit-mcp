@@ -14,18 +14,20 @@ import (
 // often exactly the awaited outcome (ADR 2.2). Status transitions are never
 // filtered — the lifecycle of a subscribed change always reaches the
 // session. The zero value filters nothing.
+//
+//exhaustruct:optional
 type Filters struct {
 	// Self is the authenticated account. Its own activity is dropped unless
 	// IncludeOwn — the session's author rarely needs an echo of itself.
-	Self gerrit.AccountInfo `exhaustruct:"optional"`
+	Self gerrit.AccountInfo
 	// IncludeOwn keeps the authenticated account's own activity.
-	IncludeOwn bool `exhaustruct:"optional"`
+	IncludeOwn bool
 	// ExcludeAccounts lists usernames or numeric account IDs whose activity
 	// is dropped.
-	ExcludeAccounts []string `exhaustruct:"optional"`
+	ExcludeAccounts []string
 	// ExcludePatterns drop events whose message or comment text matches any
 	// of them. Votes carry no text and pass.
-	ExcludePatterns []*regexp.Regexp `exhaustruct:"optional"`
+	ExcludePatterns []*regexp.Regexp
 }
 
 // apply prunes the delta in place, event by event: messages and comments

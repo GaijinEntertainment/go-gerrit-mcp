@@ -19,7 +19,7 @@ var (
 
 func errResponse(status int, body string) *gerrit.Response {
 	return &gerrit.Response{
-		Response: &http.Response{ //nolint:exhaustruct // synthetic response, only fields apiError reads
+		Response: &http.Response{ //exhaustruct:ignore — synthetic response, only fields apiError reads
 			StatusCode: status,
 			Body:       io.NopCloser(strings.NewReader(body)),
 		},

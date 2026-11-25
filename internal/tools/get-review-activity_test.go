@@ -31,8 +31,8 @@ const (
 // other than empty replaces NEW in the query and the detail.
 type activityGerrit struct {
 	detailCode int
-	status     string       `exhaustruct:"optional"`
-	details    atomic.Int64 `exhaustruct:"optional"`
+	status     string       //exhaustruct:optional
+	details    atomic.Int64 //exhaustruct:optional
 }
 
 func (g *activityGerrit) change(body string) []byte {
