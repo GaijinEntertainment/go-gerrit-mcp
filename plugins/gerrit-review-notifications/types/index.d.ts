@@ -5,6 +5,7 @@ declare module 'claude-code' {
 		'gerrit-review-notifications': {
 			subscriptions: Shaped<Record<string, Subscription>>;
 			isMainTurnRunning: boolean;
+			serverProblem: string;
 		};
 	}
 }

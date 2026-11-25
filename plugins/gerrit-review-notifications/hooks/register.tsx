@@ -14,10 +14,13 @@ const subscriptions = atom(
 	},
 );
 const isMainTurnRunning = atom({plugin: 'gerrit-review-notifications', key: 'isMainTurnRunning'} as const, false);
+const serverProblem = atom({plugin: 'gerrit-review-notifications', key: 'serverProblem'} as const, '');
 
 type Subscriptions = Record<string, Subscription>;
 
 type ActivityRequest = {change: number; since?: string; status?: string};
+
+type ServerInfo = {state?: string; reason?: string; tools?: string[]};
 
 type ActivityEntry = ActivityRequest & {
 	url?: string;
@@ -84,18 +87,56 @@ const announced = (entry: ActivityEntry): string => {
 let isPolling = false;
 let timer: Timer | undefined;
 
-const fetchActivity = async (
-	$: EngineInterface,
-	server: string,
-	changes: ActivityRequest[],
-): Promise<ActivityEntry[]> => {
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const connectServer = async ($: EngineInterface, server: string): Promise<string> => {
 	const connected = await $.mcp.connect(server);
 
 	if (!connected.isConnected) {
 		throw new Error(`MCP server "${server}" is not connected: ${connected.message}`);
 	}
 
-	const called = await $.mcp.call(connected.server, 'get_review_activity', {changes});
+	return connected.server;
+};
+
+const assertServerReady = async ($: EngineInterface, server: string): Promise<void> => {
+	const connected = await connectServer($, server);
+	const tooOld = (detail: string) =>
+		new Error(
+			`MCP server "${server}" did not answer get_server_info (${detail}): it is not go-gerrit-mcp, or a ` +
+				'go-gerrit-mcp older than this plugin that needs an update',
+		);
+	const called = await $.mcp.call(connected, 'get_server_info').catch((error: unknown) => {
+		throw tooOld(messageOf(error));
+	});
+	const text = called.content[0]?.text;
+
+	if (called.isError || text === undefined) {
+		throw tooOld(JSON.stringify(called.content));
+	}
+
+	const info = JSON.parse(text) as ServerInfo;
+
+	if (info.state !== 'ready') {
+		throw new Error(`MCP server "${server}" is not ready (${info.state}): ${info.reason}`);
+	}
+
+	if (!(info.tools ?? []).includes('get_review_activity')) {
+		throw new Error(
+			`MCP server "${server}" does not offer get_review_activity: enable its read group, and keep the tool out of ` +
+				'its tool filters',
+		);
+	}
+};
+
+const fetchActivity = async (
+	$: EngineInterface,
+	server: string,
+	changes: ActivityRequest[],
+): Promise<ActivityEntry[]> => {
+	const connected = await connectServer($, server);
+
+	const called = await $.mcp.call(connected, 'get_review_activity', {changes});
 
 	const text = called.content[0]?.text;
 
@@ -152,6 +193,8 @@ const poll = async ($: EngineInterface, server: string) => {
 
 		const entries = await fetchActivity($, server, requests);
 
+		await update($, serverProblem, () => '');
+
 		for (const entry of entries) {
 			if (entry.error !== undefined) {
 				$.ui.log(`${PLUGIN}: change ${entry.change} was not read: ${entry.error}`);
@@ -187,7 +230,15 @@ const poll = async ($: EngineInterface, server: string) => {
 
 const ensurePolling = ($: EngineInterface, server: string) => {
 	timer ??= $.clock.every(POLL_INTERVAL_MS, () => {
-		poll($, server).catch((error: unknown) => $.ui.log(`${PLUGIN}: poll failed: ${String(error)}`));
+		poll($, server).catch(async (error: unknown) => {
+			const problem = await assertServerReady($, server).then(
+				() => messageOf(error),
+				(checked: unknown) => messageOf(checked),
+			);
+
+			$.ui.log(`${PLUGIN}: poll failed: ${problem}`);
+			await update($, serverProblem, () => problem);
+		});
 	});
 };
 
@@ -259,12 +310,23 @@ export const register: Register = (on, options) => {
 
 	on('ui.render', {component: 'AbovePrompt'}, async ($, e, next) => {
 		const changes = Object.entries(await read($, subscriptions));
+		const problem = await read($, serverProblem);
 
-		if (e.props.hasSurvey || changes.length === 0) {
+		if (e.props.hasSurvey || (changes.length === 0 && problem === '')) {
 			return next(e);
 		}
 
 		const {Box, Link, Text} = $.ui.resolve(e);
+
+		if (problem !== '') {
+			return (
+				<Box>
+					<Text color="error">● </Text>
+					<Text weight="semibold">Gerrit</Text>
+					<Text dimColor> · {problem}</Text>
+				</Box>
+			);
+		}
 
 		return (
 			<Box>
@@ -309,7 +371,29 @@ export const register: Register = (on, options) => {
 			return {deny: `change ${change} is already subscribed in this session`};
 		}
 
-		const [start] = await fetchActivity($, server, [{change: input.change}]);
+		try {
+			await assertServerReady($, server);
+		} catch (error) {
+			const problem = messageOf(error);
+
+			await update($, serverProblem, () => problem);
+
+			return {deny: `change ${change} was not subscribed: ${problem}`};
+		}
+
+		let start: ActivityEntry | undefined;
+
+		try {
+			[start] = await fetchActivity($, server, [{change: input.change}]);
+		} catch (error) {
+			const problem = messageOf(error);
+
+			await update($, serverProblem, () => problem);
+
+			return {deny: `change ${change} was not read: ${problem}`};
+		}
+
+		await update($, serverProblem, () => '');
 
 		if (start === undefined || start.error !== undefined) {
 			return {deny: `change ${change} was not read: ${start?.error ?? 'the server returned no entry'}`};
