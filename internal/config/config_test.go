@@ -94,28 +94,6 @@ func Test_Load_Groups(t *testing.T) {
 func Test_Load_Errors(t *testing.T) {
 	t.Parallel()
 
-	t.Run("missing secrets aggregated", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := config.Load(nil, env(map[string]string{}))
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "GERRIT_URL")
-		assert.ErrorContains(t, err, "GERRIT_USERNAME")
-		assert.ErrorContains(t, err, "GERRIT_TOKEN")
-	})
-
-	t.Run("single missing secret named alone", func(t *testing.T) {
-		t.Parallel()
-
-		m := secrets()
-		delete(m, "GERRIT_TOKEN")
-
-		_, err := config.Load(nil, env(m))
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "GERRIT_TOKEN")
-		assert.NotContains(t, err.Error(), "GERRIT_URL")
-	})
-
 	t.Run("unknown group named in error", func(t *testing.T) {
 		t.Parallel()
 
@@ -131,19 +109,6 @@ func Test_Load_Errors(t *testing.T) {
 		_, err := config.Load([]string{"--groups", ""}, env(secrets()))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "no capability groups enabled")
-	})
-
-	t.Run("group error and secret error reported together", func(t *testing.T) {
-		t.Parallel()
-
-		m := secrets()
-		delete(m, "GERRIT_URL")
-
-		_, err := config.Load([]string{"--groups", "bogus"}, env(m))
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "GERRIT_URL")
-		assert.ErrorContains(t, err, "unknown capability groups")
-		assert.ErrorContains(t, err, "bogus")
 	})
 
 	t.Run("unknown flag rejected", func(t *testing.T) {
@@ -236,14 +201,13 @@ func Test_Load_OwnChanges(t *testing.T) {
 	t.Run("invalid bool reported with other errors", func(t *testing.T) {
 		t.Parallel()
 
-		m := secrets()
-		delete(m, "GERRIT_TOKEN")
-
-		_, err := config.Load([]string{"--own-changes-only=nope"}, env(m))
+		_, err := config.Load([]string{
+			"--own-changes-only=nope", "--groups", "bogus",
+		}, env(secrets()))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "invalid boolean flag value")
 		assert.ErrorContains(t, err, "own-changes-only")
-		assert.ErrorContains(t, err, "GERRIT_TOKEN")
+		assert.ErrorContains(t, err, "unknown capability groups")
 	})
 }
 
@@ -368,26 +332,47 @@ func Test_Load_ActivityFilters(t *testing.T) {
 	t.Run("every invalid pattern named alongside other errors", func(t *testing.T) {
 		t.Parallel()
 
-		m := secrets()
-		delete(m, "GERRIT_TOKEN")
-
 		_, err := config.Load([]string{
-			"--activity-exclude-patterns", "[one,ok.*,(two",
-		}, env(m))
+			"--activity-exclude-patterns", "[one,ok.*,(two", "--groups", "bogus",
+		}, env(secrets()))
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "[one")
 		assert.ErrorContains(t, err, "(two")
-		assert.ErrorContains(t, err, "GERRIT_TOKEN")
+		assert.ErrorContains(t, err, "unknown capability groups")
 	})
 }
 
 func Test_Load_Connection(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := config.Load(nil, env(secrets()))
-	require.NoError(t, err)
+	t.Run("variables resolve from env", func(t *testing.T) {
+		t.Parallel()
 
-	assert.Equal(t, "https://gerrit.example.com", cfg.GerritURL)
-	assert.Equal(t, "bot", cfg.Username)
-	assert.Equal(t, "s3cret", cfg.Token)
+		cfg, err := config.Load(nil, env(secrets()))
+		require.NoError(t, err)
+
+		assert.Equal(t, "https://gerrit.example.com", cfg.GerritURL)
+		assert.Equal(t, "bot", cfg.Username)
+		assert.Equal(t, "s3cret", cfg.Token)
+		assert.Empty(t, cfg.MissingEnv())
+	})
+
+	t.Run("unset variables are named, not an error", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, err := config.Load(nil, env(map[string]string{}))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"GERRIT_URL", "GERRIT_USERNAME", "GERRIT_TOKEN"}, cfg.MissingEnv())
+	})
+
+	t.Run("one unset variable named alone", func(t *testing.T) {
+		t.Parallel()
+
+		m := secrets()
+		delete(m, "GERRIT_TOKEN")
+
+		cfg, err := config.Load(nil, env(m))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"GERRIT_TOKEN"}, cfg.MissingEnv())
+	})
 }
