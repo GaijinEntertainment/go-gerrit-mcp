@@ -42,6 +42,24 @@ jobs:
       - run: go build ./...
       - run: go test -race ./...
 
+  plugins:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins
+    steps:
+      - uses: actions/checkout@v7
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          working-directory: plugins
+          cache: true
+      # The plugin check runs claude plugin validate and claude plugin test.
+      - run: npm install -g @anthropic-ai/claude-code@latest
+      - run: vp check
+      - run: vp exec rumdl fmt --check .
+      - run: vp run typecheck
+      - run: vp run plugins
+
   release-dry-run:
     strategy:
       fail-fast: false
@@ -84,7 +102,7 @@ jobs:
   # which GitHub gives a job that got no runner.
   ci-ok:
     if: always()
-    needs: [lint, test, release-dry-run]
+    needs: [lint, test, plugins, release-dry-run]
     runs-on: ubuntu-latest
     steps:
       - name: verify all jobs succeeded

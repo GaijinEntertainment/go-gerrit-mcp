@@ -11,6 +11,16 @@ updates:
           - minor
           - patch
 
+  - package-ecosystem: npm
+    directory: /plugins
+    schedule:
+      interval: weekly
+    groups:
+      plugin-tooling:
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
