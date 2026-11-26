@@ -87,6 +87,14 @@ const announced = (entry: ActivityEntry): string => {
 let isPolling = false;
 let timer: Timer | undefined;
 
+// constraint: the engine passes tool input through unchecked, and a model sends a change number as a string as
+// readily as an integer
+const changeNumberOf = (value: unknown): number | undefined => {
+	const number = typeof value === 'string' && /^[1-9]\d*$/.test(value.trim()) ? Number(value.trim()) : value;
+
+	return typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? number : undefined;
+};
+
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 const connectServer = async ($: EngineInterface, server: string): Promise<string> => {
@@ -360,12 +368,14 @@ export const register: Register = (on, options) => {
 	});
 
 	on('tool.run', {tool: 'mcp__gerrit-review-notifications__subscribe_change'}, async ($, e) => {
-		const input = e as unknown as {change: number};
-		const change = String(input.change);
+		const input = e as unknown as {change: unknown};
+		const number = changeNumberOf(input.change);
 
-		if (!Number.isInteger(input.change)) {
+		if (number === undefined) {
 			return {deny: `change must be a change number, got ${JSON.stringify(input.change)}`};
 		}
+
+		const change = String(number);
 
 		if (change in (await read($, subscriptions))) {
 			return {deny: `change ${change} is already subscribed in this session`};
@@ -384,7 +394,7 @@ export const register: Register = (on, options) => {
 		let start: ActivityEntry | undefined;
 
 		try {
-			[start] = await fetchActivity($, server, [{change: input.change}]);
+			[start] = await fetchActivity($, server, [{change: number}]);
 		} catch (error) {
 			const problem = messageOf(error);
 
@@ -420,7 +430,8 @@ export const register: Register = (on, options) => {
 	});
 
 	on('tool.run', {tool: 'mcp__gerrit-review-notifications__unsubscribe_change'}, async ($, e) => {
-		const change = String((e as unknown as {change: number}).change);
+		const input = e as unknown as {change: unknown};
+		const change = String(changeNumberOf(input.change) ?? input.change);
 
 		if (!(change in (await read($, subscriptions)))) {
 			return {result: `Change ${change} was not subscribed.`};
