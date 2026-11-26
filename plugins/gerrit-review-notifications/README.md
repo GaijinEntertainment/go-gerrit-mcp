@@ -41,8 +41,8 @@ A subscription belongs to one session and leaves no trace on the Gerrit instance
 
 ## Installation
 
-The session needs a go-gerrit-mcp server that offers `get_server_info` and `get_review_activity`: a release that has
-`get_server_info`, with the `read` group enabled.
+The session needs a go-gerrit-mcp server that offers `get_server_info` and `get_review_activity`: v1.2.0 or newer, with
+the `read` group enabled.
 
 ```text
 /plugin install gerrit-review-notifications --marketplace GaijinEntertainment/go-gerrit-mcp
