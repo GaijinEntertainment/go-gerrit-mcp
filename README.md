@@ -7,6 +7,7 @@ capability is an explicit operator opt-in.
 - Transport: stdio
 - Target platform: Gerrit 3.13+, authenticated via HTTP credentials
 - Output: llmxml, semantically tagged text meant to be read by a model (see [Output format](#output-format))
+- Companion: a Claude Code plugin that brings [review notifications](#review-notifications) into the session
 
 ## Safety posture
 
@@ -61,9 +62,8 @@ The server reads connection identity from environment variables only; credential
 | `GERRIT_TOKEN`    | HTTP credential paired with the username           |
 
 Generate the credential in Gerrit under **Settings → HTTP Credentials** (an HTTP password, or an auth token on instances
-that issue them). All three variables are required. A server without them, with credentials that Gerrit rejects, or with
-no Gerrit to reach at startup stays up with `get_server_info` only, which names the cause; fix it and restart the
-server.
+that issue them). All three variables are required. A server that cannot use them does not exit: it stays up and reports
+the cause (see [Server readiness](#server-readiness)).
 
 ### Claude Code
 
@@ -173,7 +173,7 @@ own, and enabled groups union.
 | `comment`    | `get_change`, `get_change_comments`, `post_comments`                                     |
 | `transition` | `get_change`, `set_vote`, `transition_change`                                            |
 
-`get_server_info` is outside the groups: every configuration registers it, and no tool filter removes it.
+`get_server_info` is outside the groups (see [Server readiness](#server-readiness)).
 
 ### Tools
 
@@ -185,57 +185,46 @@ own, and enabled groups union.
   threads only by default; `status=all` fetches the full history, `status=resolved` the settled threads.
 - `get_review_activity`: new review activity on a list of changes past a point that the caller keeps, as JSON for
   a program. The server keeps no state. The [review notifications](#review-notifications) plugin calls it.
-- `get_server_info`: the server name and version, the MCP protocol version, the `state` (`ready`, `not_configured`,
-  `credentials_rejected`, or `unreachable`, with a `reason` when it is not ready), the Gerrit account, and the
-  enabled groups, tools, and project scope, as JSON for a program. The
-  [review notifications](#review-notifications) plugin calls it to check the server.
 - `post_comments`: publish a review in one call: optional top-level message plus inline, range, file-level, and
   reply comments. Replies anchor to comment ids from `get_change_comments`; `resolved` toggles the thread state.
 - `set_vote`: set a label vote (e.g. `Code-Review`) with an optional message; value `0` clears an own vote.
 - `transition_change`: move a change's state: `submit`, `abandon`, `restore`, `wip`, or `ready`, with an optional
   message (submit accepts none). Gerrit's refusal (a blocked submit, a restore of a merged change) is reported
   verbatim.
+- `get_server_info`: which server this is and whether it can serve Gerrit, as JSON for a program: the server name and
+  version, the MCP protocol version of the session, the `state` (see [Server readiness](#server-readiness)), the Gerrit
+  account, and the enabled groups, tools, and project scope.
 
 ## Review notifications
 
-Review activity that arrives in the session by itself. The Claude Code plugin
-[gerrit-review-notifications](plugins/gerrit-review-notifications/) adds two tools, `subscribe_change` and
-`unsubscribe_change`. After the agent subscribes to a change, new change messages, votes, inline comment threads, and
-status transitions arrive in the session as `review_activity` blocks. A block uses the same llmxml vocabulary as the
-read tools and carries the activity whole, so nothing needs fetching afterwards. A merged or abandoned change ends its
-own subscription with a last notification that says so, and so does a change that becomes unreadable (deleted, or no
-longer visible to the account).
+After an agent pushes a change for review, the outcome it waits for comes later: a CI verdict, a reviewer's reply, an
+approval. The Claude Code plugin [gerrit-review-notifications](plugins/gerrit-review-notifications/) brings that
+activity into the session by itself. The agent subscribes to a change once with `subscribe_change`, and new change
+messages, votes, inline comment threads, and status transitions then arrive as `review_activity` blocks. A block uses
+the same llmxml vocabulary as the read tools and carries the activity whole, so nothing needs fetching afterwards.
 
-The server has no `--review-notifications*` flags, and it does not start with one of them. Remove
-`--review-notifications` and `--review-notifications-poll-interval` from the server arguments, and replace the filter
-flags `--review-notifications-include-own`, `--review-notifications-exclude-accounts`, and
-`--review-notifications-exclude-patterns` with the `--activity-*` flags below. The server ignores the old
-`GERRIT_MCP_REVIEW_NOTIFICATIONS_*` variables, so rename them to `GERRIT_MCP_ACTIVITY_*` too. Then install the plugin
-in Claude Code:
+Install the plugin in Claude Code:
 
 ```
 /plugin install gerrit-review-notifications --marketplace GaijinEntertainment/go-gerrit-mcp
 ```
 
-The plugin starts no server. Every 60 seconds it calls `get_review_activity` on the Gerrit MCP server that the session
-already runs: one batched query for all subscribed changes, and a detail fetch only for a change that moved or that
-the query did not list. It finds the server by name: `gerrit` by default, or the name in the plugin option `server`.
-That server must offer `get_server_info`, which the plugin calls to check it, and `get_review_activity`, which the
-`read` group includes.
+The plugin starts no server of its own. It calls `get_review_activity` on the Gerrit MCP server that the session already
+runs, so it needs:
 
-Subscriptions belong to one session and leave no trace on the Gerrit instance. The server holds nothing about them.
+- Claude Code 2.1.330 or newer;
+- go-gerrit-mcp v1.2.0 or newer, with the `read` group enabled and `get_review_activity` kept by the tool filters;
+- that server registered under the name `gerrit`, or the plugin option `server` set to the name it has.
 
-Noise control is operator configuration on the server. The server applies no heuristics of its own and filters
-nothing by message tag, because a bot's verdict is often exactly the outcome the agent is waiting for:
+Before a subscription the plugin checks the server through `get_server_info`, and it refuses with the cause when the
+server is not ready. Subscriptions belong to one session and leave no trace on the Gerrit instance. The server holds
+nothing about them. The [plugin README](plugins/gerrit-review-notifications/README.md) covers delivery, the end of a
+subscription, and the limits.
 
-- the authenticated account's own activity is skipped by default (`--activity-include-own` keeps it);
-- `--activity-exclude-accounts` silences accounts by username or numeric ID;
-- `--activity-exclude-patterns` drops events whose message or comment text matches a regular
-  expression; an invalid pattern fails startup with an error naming it.
-
-Every flag has a `GERRIT_MCP_*` mirror that follows the same settings layering as the rest of the configuration
-(see [Per-project configuration](#per-project-configuration-in-claude-code)), so a project can pick exclusions in its
-own settings file.
+Which activity counts is operator configuration on the server. The server applies no heuristics of its own and filters
+nothing by message tag, because a bot's verdict is often exactly the outcome the agent is waiting for. The authenticated
+account's own messages, votes, and comments are skipped by default, and the `--activity-*` flags keep them or exclude
+accounts and message patterns (see [Configuration reference](#configuration-reference)).
 
 ## Configuration reference
 
@@ -249,9 +238,14 @@ binary and Docker invocations alike. Precedence: the flag wins over its mirror, 
 | `--own-changes-only` | `GERRIT_MCP_OWN_CHANGES_ONLY` | `true`  | Refuse trail-leaving operations on changes not owned by the authenticated account |
 | `--include-tools`    | `GERRIT_MCP_INCLUDE_TOOLS`    | (empty) | Keep only the listed tools from the group-resolved set         |
 | `--exclude-tools`    | `GERRIT_MCP_EXCLUDE_TOOLS`    | (empty) | Remove the listed tools from the group-resolved set            |
-| `--activity-include-own` | `GERRIT_MCP_ACTIVITY_INCLUDE_OWN` | `false` | Keep the authenticated account's own activity in the reported review activity |
-| `--activity-exclude-accounts` | `GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS` | (empty) | Accounts (usernames or numeric IDs) whose activity is never reported |
-| `--activity-exclude-patterns` | `GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS` | (empty) | Comma-separated regular expressions; matching message or comment text is never reported |
+
+Three more flags filter the review activity that `get_review_activity` reports:
+
+| Flag                          | Mirror                                 | Default | Meaning                                              |
+| ----------------------------- | -------------------------------------- | ------- | ---------------------------------------------------- |
+| `--activity-include-own`      | `GERRIT_MCP_ACTIVITY_INCLUDE_OWN`      | `false` | Keep the authenticated account's own messages, votes, and comments |
+| `--activity-exclude-accounts` | `GERRIT_MCP_ACTIVITY_EXCLUDE_ACCOUNTS` | (empty) | Usernames or numeric account IDs whose messages, votes, and comments are dropped |
+| `--activity-exclude-patterns` | `GERRIT_MCP_ACTIVITY_EXCLUDE_PATTERNS` | (empty) | Regular expressions; a message or comment whose text matches is dropped |
 
 Notes:
 
@@ -262,8 +256,31 @@ Notes:
 - Tool filters only narrow. `--exclude-tools` removes tools from what the groups resolved; `--include-tools` keeps
   only the listed subset of it. A tool outside the enabled groups can never be activated by a filter, and exclude
   wins over include. Filter entries naming no known tool fail startup, so misconfigurations surface immediately.
-- Configuration errors are aggregated: the server reports every problem at once, then exits non-zero. The Gerrit
-  connection is not a configuration error: see [Quick start](#quick-start).
+- The two exclusion lists are comma-separated. An invalid pattern fails startup with an error naming it. The activity
+  filters drop messages, votes, and comments only: a status transition is always reported, and a dropped comment still
+  arrives as context when another new comment of its thread is kept.
+- Configuration errors are aggregated: the server reports every invalid value at once, then exits non-zero. An unknown
+  or malformed flag stops the server before that, with its own error. A Gerrit connection that does not work is not a
+  configuration error (see [Server readiness](#server-readiness)).
+
+## Server readiness
+
+The server checks its Gerrit connection once, at startup. `get_server_info` reports the outcome as `state`, with a
+`reason` when the state is not `ready`:
+
+| State                  | Meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `ready`                | Gerrit accepted the credentials, and the enabled tools are registered    |
+| `not_configured`       | A required variable is unset, or no client can be built from `GERRIT_URL` |
+| `credentials_rejected` | Gerrit answered the credential check with 401 or 403                     |
+| `unreachable`          | The credential check failed in any other way, such as a network error    |
+
+A server in a state other than `ready` stays up and registers `get_server_info` alone. The tool result, the server
+instructions, and stderr name the reason, so the agent can tell the user what to correct. A stdio server that exits
+can show only as a closed connection in the client, which loses the reason. The server does not check again: correct the
+cause and restart the server.
+
+`get_server_info` is registered in every state. No group selects it and no tool filter removes it.
 
 ## Output format
 
