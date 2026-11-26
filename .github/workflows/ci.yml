@@ -80,21 +80,28 @@ jobs:
           version: "~> v2"
           args: release --snapshot --clean
       - name: image smoke test
-        # The image must start, print an actionable error, and exit non-zero
-        # when required env is missing.
+        # Without the required env the image must serve MCP, and its
+        # get_server_info must name the missing variables.
         run: |
           img=$(docker image ls --format '{{.Repository}}:{{.Tag}}' ghcr.io/gaijinentertainment/go-gerrit-mcp \
             | grep -- '-amd64$' | head -n 1)
           [[ -n "$img" ]] || { echo "no snapshot image found" >&2; exit 1; }
 
-          set +e
-          out=$(docker run --rm "$img" 2>&1)
-          code=$?
-          set -e
+          coproc mcp { docker run --rm -i "$img"; }
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_server_info","arguments":{}}}' \
+            >&"${mcp[1]}"
 
-          printf '%s\n' "$out"
-          [[ "$code" -ne 0 ]] || { echo "image must exit non-zero without env" >&2; exit 1; }
-          grep -q GERRIT_URL <<<"$out" || { echo "error must name the missing env var" >&2; exit 1; }
+          info=
+          while [[ -z "$info" ]] && IFS= read -r -t 60 line <&"${mcp[0]}"; do
+            info=$(jq -r 'select(.id == 2) | .result.content[0].text' <<<"$line")
+          done
+
+          printf '%s\n' "$info"
+          jq -e '.state == "not_configured" and (.reason | contains("GERRIT_URL"))' <<<"$info" >/dev/null \
+            || { echo "get_server_info must report not_configured and name the missing env var" >&2; exit 1; }
 
   # ci-ok is the single branch-protection gate: it passes only when every job
   # of the run passed or was skipped — so conditional jobs never need
