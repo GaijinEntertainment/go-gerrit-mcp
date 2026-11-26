@@ -224,6 +224,32 @@ test('a change outside the project scope is refused with the reason from the ser
 	expect(ran.deny).toBe(`change 123 was not read: ${reason}`);
 });
 
+test('a change number sent as a string is subscribed and unsubscribed', async ($, on) => {
+	const {calls} = world(on, [[START]]);
+
+	await start($);
+	const subscribed = await $.tool.run({tool: SUBSCRIBE, tool_use_id: 'call', change: '123'});
+	const unsubscribed = await $.tool.run({tool: UNSUBSCRIBE, tool_use_id: 'call', change: '123'});
+
+	expect(calls[0]).toEqual({changes: [{change: 123}]});
+	expect(subscribed.deny).toBeUndefined();
+	expect(unsubscribed.result).toBe('Unsubscribed from change 123.');
+});
+
+test('a change that is not a number is refused at subscribe', async ($, on) => {
+	const {calls} = world(on, [[START]]);
+
+	await start($);
+	const changeId = await $.tool.run({tool: SUBSCRIBE, tool_use_id: 'call', change: 'I8473b95'});
+	const padded = await $.tool.run({tool: SUBSCRIBE, tool_use_id: 'call', change: '0123'});
+	const unsafe = await $.tool.run({tool: SUBSCRIBE, tool_use_id: 'call', change: '9007199254740993'});
+
+	expect(changeId.deny).toBe('change must be a change number, got "I8473b95"');
+	expect(padded.deny).toBe('change must be a change number, got "0123"');
+	expect(unsafe.deny).toBe('change must be a change number, got "9007199254740993"');
+	expect(calls).toEqual([]);
+});
+
 test('a second subscribe to the same change is refused', async ($, on) => {
 	world(on, [[START]]);
 
