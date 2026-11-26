@@ -101,9 +101,7 @@ func (a *apiErr) Unwrap() error { return a.err }
 // APIStatus reports the HTTP status carried by an error chain, 0 when the
 // error did not originate from a Gerrit API response.
 func APIStatus(err error) int {
-	var a *apiErr
-
-	if errors.As(err, &a) {
+	if a, ok := errors.AsType[*apiErr](err); ok {
 		return a.status
 	}
 
