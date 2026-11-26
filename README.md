@@ -60,9 +60,10 @@ The server reads connection identity from environment variables only; credential
 | `GERRIT_USERNAME` | Account username for HTTP Basic authentication     |
 | `GERRIT_TOKEN`    | HTTP credential paired with the username           |
 
-Generate the credential in Gerrit under **Settings → HTTP Credentials** (an HTTP password, or an auth token on
-instances that issue them). All three variables are required. A server without them, with credentials that Gerrit rejects, or with no Gerrit
-to reach at startup stays up with `get_server_info` only, which names the cause; fix it and restart the server.
+Generate the credential in Gerrit under **Settings → HTTP Credentials** (an HTTP password, or an auth token on instances
+that issue them). All three variables are required. A server without them, with credentials that Gerrit rejects, or with
+no Gerrit to reach at startup stays up with `get_server_info` only, which names the cause; fix it and restart the
+server.
 
 ### Claude Code
 
@@ -266,8 +267,9 @@ Notes:
 
 ## Output format
 
-Every tool that a model reads responds in llmxml, an LLM-digestible subset of XML: line-structured, semantically
-tagged text. The exceptions are `get_review_activity` and `get_server_info`, which return JSON for the plugin that calls them. Attributes carry metadata; element bodies carry content:
+Every tool that a model reads responds in llmxml, an LLM-digestible subset of XML: line-structured, semantically tagged
+text. The exceptions are `get_review_activity` and `get_server_info`, which return JSON for the plugin that calls them.
+Attributes carry metadata; element bodies carry content:
 
 ```
 <changes query="status:open owner:self" start="0" count="1" more="false">
