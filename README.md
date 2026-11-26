@@ -44,7 +44,7 @@ Docker:
 docker pull ghcr.io/gaijinentertainment/go-gerrit-mcp:latest
 ```
 
-go install:
+go install, with Go 1.27.4 or newer. An older Go downloads that toolchain by itself, unless `GOTOOLCHAIN` forbids it:
 
 ```sh
 go install dev.gaijin.team/go/go-gerrit-mcp/cmd/go-gerrit-mcp@latest
